@@ -4,7 +4,6 @@
 // ============================================================================
 using System.Net;
 using System.Net.Http.Json;
-using CyberCafe.Api.Auth;
 using CyberCafe.Contracts.Common;
 using CyberCafe.Contracts.Orders;
 using CyberCafe.Contracts.Products;

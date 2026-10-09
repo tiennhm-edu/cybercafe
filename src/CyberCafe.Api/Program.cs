@@ -5,25 +5,27 @@
 //   Buổi 36–41: EF Core SQL Server (DbContext Scoped), báo cáo doanh thu (stored procedure).
 //   Buổi 42–47: JWT + policy, middleware (correlation id, request log), exception handler → ProblemDetails,
 //               Redis cache, rate limiting, seed tài khoản dev.
+//   Buổi 48: COMPOSITION ROOT của Clean Architecture — DbContext, JWT/BCrypt, Redis... không đăng ký ở đây nữa
+//            mà qua AddApplication() + AddInfrastructure(). File này chỉ còn phần của "cửa vào" HTTP.
 // Vẫn 2 phần như Web: (1) builder.Services... đăng ký DI; (2) app.Use/Map... cấu hình pipeline.
-// Chạy: docker compose up -d → dotnet ef database update → dotnet run --project src/CyberCafe.Api
-//       → http://localhost:5180/scalar/v1
+// Chạy: docker compose up -d
+//       → dotnet ef database update -p src/CyberCafe.Infrastructure -s src/CyberCafe.Api
+//       → dotnet run --project src/CyberCafe.Api → http://localhost:5180/scalar/v1
 // ============================================================================
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using CyberCafe.Api.Auth;
-using CyberCafe.Api.Caching;
 using CyberCafe.Api.Controllers;
-using CyberCafe.Api.Data;
 using CyberCafe.Api.Errors;
 using CyberCafe.Api.Middleware;
 using CyberCafe.Api.Realtime;
-using CyberCafe.Api.Reports;
+using CyberCafe.Application;
 using CyberCafe.Contracts.Auth;
 using CyberCafe.Contracts.Realtime;
+using CyberCafe.Infrastructure;
+using CyberCafe.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
@@ -40,34 +42,21 @@ builder.Services.AddControllers()
 // Buổi 42–47: khai báo JWT Bearer → Scalar có ô nhập token.
 builder.Services.AddOpenApi(o => o.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
 
-// 👉 Bước 3 (b40.md): DbContext. AddDbContext mặc định SCOPED = 1 instance / request.
-// Connection string đọc từ "ConnectionStrings:CyberCafe" (appsettings.Development.json / user-secrets / biến môi trường).
-// ⚠️ Lỗi hay gặp: đăng ký DbContext là Singleton → nhiều request dùng chung 1 DbContext → lỗi đa luồng.
-builder.Services.AddDbContext<CyberCafeDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("CyberCafe")));
+// 👉 Bước 10 (b48.md): mỗi tầng tự đăng ký service của mình.
+//   AddApplication():    use case (MenuService, OrderService).
+//   AddInfrastructure(): DbContext (Scoped) + repository + IUnitOfWork, JwtOptions (fail fast), TokenService,
+//                        BCrypt, AuthService, cache Redis/RAM, báo cáo doanh thu — trước nằm hết ở file này (b47).
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration);
 
 // 👉 Bước 9 (b40.md): SignalR. JSON của hub cũng đổi enum sang chuỗi → giống REST.
 builder.Services.AddSignalR()
     .AddJsonProtocol(o => o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-builder.Services.AddScoped<IOrderNotifier, SignalROrderNotifier>();
-
-// Báo cáo doanh thu (SP trên SQL Server, LINQ trên provider khác)
-builder.Services.AddScoped<RevenueReportService>();
+// 👉 Bước 9 (b48.md): adapter SignalR ở Infrastructure, hub ở Api → Api (composition root) chọn hub cụ thể.
+builder.Services.AddOrderNotifier<OrderHub>();
 
 // ===== Buổi 42–47: Authentication (bạn là ai?) + Authorization (bạn được làm gì?) =====
-// TimeProvider: "đồng hồ" có thể thay bằng đồng hồ giả trong test (token hết hạn, refresh hết hạn...)
-builder.Services.AddSingleton(TimeProvider.System);
-
-// 👉 Bước 1 (b47.md): Options pattern + kiểm tra NGAY khi khởi động (fail fast) — thiếu key thì không chạy.
-builder.Services.AddOptions<JwtOptions>()
-    .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
-    .Validate(o => Encoding.UTF8.GetByteCount(o.Key) >= 32,
-        "Jwt:Key phải dài tối thiểu 32 byte (đặt bằng user-secrets hoặc biến môi trường Jwt__Key).")
-    .ValidateOnStart();
-builder.Services.AddSingleton<ITokenService, TokenService>();
-builder.Services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
-builder.Services.AddScoped<AuthService>();
-
+// Phát token: TokenService (Infrastructure). KIỂM TRA token ở mỗi request: JwtBearer (cửa vào HTTP → ở lại Api).
 // JwtBearer kiểm tra "Authorization: Bearer <token>" ở MỖI request (không tra DB: chỉ kiểm chữ ký + hạn).
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -116,25 +105,6 @@ builder.Services.AddCyberCafePolicies(); // ManageMenu / ProcessOrders / PlaceOr
 builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = ctx =>
     ctx.ProblemDetails.Extensions["correlationId"] = ctx.HttpContext.Items[CorrelationIdMiddleware.ItemKey]);
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
-
-// ===== Buổi 42–47: Cache =====
-// Redis khi bật cờ "Redis:Enabled", ngược lại dùng cache trong RAM (cùng interface IDistributedCache
-// → MenuCache không cần biết đang chạy loại nào; test và máy không có Docker vẫn chạy được).
-string? redis = builder.Configuration.GetConnectionString("Redis");
-if (builder.Configuration.GetValue<bool>("Redis:Enabled") && !string.IsNullOrWhiteSpace(redis))
-{
-    builder.Services.AddStackExchangeRedisCache(o =>
-    {
-        o.Configuration = redis;
-        o.InstanceName = "cybercafe:"; // tiền tố key — nhiều app dùng chung 1 Redis không đụng nhau
-    });
-}
-else
-{
-    builder.Services.AddDistributedMemoryCache();
-}
-
-builder.Services.AddSingleton<MenuCache>();
 
 // ===== Buổi 42–47: Rate limiting (có sẵn trong ASP.NET Core) =====
 // Fixed window: mỗi IP tối đa N request / 1 phút cho đăng nhập + đăng ký. Quá → 429 Too Many Requests.
@@ -202,7 +172,7 @@ app.UseRateLimiter();
 app.MapControllers();
 app.MapHub<OrderHub>(OrderHubContract.Path); // ws://localhost:5180/hubs/orders
 
-// Seed tài khoản dev (chỉ khi Seed:DevAccounts = true — xem DevAccountSeeder.cs)
+// Seed tài khoản dev (chỉ khi Seed:DevAccounts = true — xem Infrastructure/Identity/DevAccountSeeder.cs)
 await DevAccountSeeder.SeedAsync(app.Services);
 
 app.Run();

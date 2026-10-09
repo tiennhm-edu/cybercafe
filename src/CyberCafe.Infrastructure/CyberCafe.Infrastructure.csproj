@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    CyberCafe.Infrastructure (Buổi 48 · Clean Architecture): tầng HẠ TẦNG — cài đặt các interface của Application.
+      Persistence/  EF Core SQL Server: DbContext, Configurations (Fluent API), Migrations, repository
+      Identity/     User + RefreshToken, BCrypt, JWT, AuthService, seed tài khoản dev
+      Caching/      MenuCache trên IDistributedCache (Redis hoặc RAM)
+      Realtime/     SignalROrderNotifier<THub> (adapter của IOrderNotifier)
+      Reports/      Doanh thu: stored procedure / LINQ
+    Chiều phụ thuộc: Infrastructure → Application → Domain. Api tham chiếu Infrastructure CHỈ để gọi AddInfrastructure().
+    Version package nằm trong Directory.Packages.props (Central Package Management).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- IConfiguration, ILogger, Options, SignalR (IHubContext) — có sẵn trong shared framework ASP.NET Core -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="BCrypt.Net-Next" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
+    <!-- Chỉ cần thư viện TẠO JWT; middleware kiểm tra JWT (JwtBearer) vẫn nằm ở Api -->
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CyberCafe.Application\CyberCafe.Application.csproj" />
+  </ItemGroup>
+
+</Project>

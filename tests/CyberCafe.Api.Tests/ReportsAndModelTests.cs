@@ -7,9 +7,9 @@
 // ============================================================================
 using System.Net;
 using System.Net.Http.Json;
-using CyberCafe.Api.Data;
 using CyberCafe.Contracts.Orders;
 using CyberCafe.Contracts.Reports;
+using CyberCafe.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace CyberCafe.Api.Tests;

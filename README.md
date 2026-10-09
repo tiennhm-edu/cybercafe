@@ -57,7 +57,9 @@ docker compose ps             # đợi STATUS = healthy
 
 # 2. Tạo database CyberCafeDb + bảng + dữ liệu mẫu + stored procedure + bảng Users
 dotnet tool restore           # cài dotnet-ef theo dotnet-tools.json
-dotnet ef database update -p src/CyberCafe.Api
+# từ b48: migration nằm ở Infrastructure (-p), cấu hình đọc từ Api (-s)
+dotnet ef database update -p src/CyberCafe.Infrastructure -s src/CyberCafe.Api
+# (tag b40/b47: dotnet ef database update -p src/CyberCafe.Api)
 
 # 3. Chạy 2 project ở 2 terminal
 dotnet run --project src/CyberCafe.Api    # http://localhost:5180  (Scalar: /scalar/v1)
@@ -85,11 +87,13 @@ Khóa JWT trong `appsettings.Development.json` cũng là giá trị **giả**; m
 
 Dọn dẹp: `docker compose down` (giữ dữ liệu) hoặc `docker compose down -v` (xóa luôn database).
 
-Gợi ý demo (tag `b47-auth-cache`): tab 1 đăng nhập `barista@…` → **Quầy barista**; tab 2 đăng nhập `customer@…` → **Thực đơn** → thêm món → **Đặt hàng** → đơn hiện ngay ở tab barista → bấm *Bắt đầu pha* → trang xác nhận đơn của khách tự đổi trạng thái. Tab 3 đăng nhập `admin@…` → **Quản lý thực đơn** (xóa món đã bán → 409). Khách gõ URL `/barista` → "Không có quyền truy cập".
+Gợi ý demo (từ tag `b47-auth-cache`): tab 1 đăng nhập `barista@…` → **Quầy barista**; tab 2 đăng nhập `customer@…` → **Thực đơn** → thêm món → **Đặt hàng** → đơn hiện ngay ở tab barista → bấm *Bắt đầu pha* → trang xác nhận đơn của khách tự đổi trạng thái. Tab 3 đăng nhập `admin@…` → **Quản lý thực đơn** (xóa món đã bán → 409). Khách gõ URL `/barista` → "Không có quyền truy cập".
 
 ---
 
-## Cấu trúc thư mục (tại `b47-auth-cache`)
+## Cấu trúc thư mục (tại `b48-clean-arch`)
+
+Sơ đồ tầng + luật phụ thuộc: [docs/architecture.md](docs/architecture.md).
 
 ```
 cybercafe/
@@ -108,17 +112,26 @@ cybercafe/
 │   │   ├── Payments/            # Payment → Cash/Card/Momo; PaymentFactory
 │   │   └── People/              # Person → Customer / Employee
 │   ├── CyberCafe.Contracts/     # DTO/request dùng chung Api ↔ Web, tên sự kiện SignalR
-│   ├── CyberCafe.Api/           # ASP.NET Core Web API (controllers)
-│   │   ├── Auth/                # User, JWT TokenService, BCrypt, AuthService, Policies, DevAccountSeeder
+│   ├── CyberCafe.Application/   # (b48) use case + port — KHÔNG biết EF Core / ASP.NET Core
+│   │   ├── Common/              # CurrentUser, exception nghiệp vụ (NotFound/Validation/Conflict), IUnitOfWork
+│   │   ├── Products/            # MenuService, IProductRepository, ProductMapping
+│   │   ├── Orders/              # OrderService, IOrderRepository, IOrderNotifier, OrderMapping
+│   │   ├── Auth/ Caching/ Reports/  # IAuthService, IMenuCache, IRevenueReportService
+│   │   └── DependencyInjection.cs   # AddApplication()
+│   ├── CyberCafe.Infrastructure/ # (b48) cài đặt các port
+│   │   ├── Persistence/         # CyberCafeDbContext (+IUnitOfWork), Configurations/, Migrations/, Repositories/, MenuSeed
+│   │   ├── Identity/            # User, RefreshToken, JWT TokenService, BCrypt, AuthService, DevAccountSeeder
 │   │   ├── Caching/             # MenuCache (Redis / IDistributedCache)
+│   │   ├── Realtime/            # SignalROrderNotifier<THub>, IOrderClient
+│   │   ├── Reports/             # Doanh thu theo ngày (stored procedure / LINQ)
+│   │   └── DependencyInjection.cs   # AddInfrastructure(configuration), AddOrderNotifier<THub>()
+│   ├── CyberCafe.Api/           # ASP.NET Core Web API — controller mỏng + composition root
+│   │   ├── Auth/                # Policies, ToCurrentUser(), Bearer cho OpenAPI
 │   │   ├── Controllers/         # Auth, Products, Orders, Reports
-│   │   ├── Data/                # CyberCafeDbContext, Configurations/ (Fluent API), Migrations/, MenuSeed
-│   │   ├── Errors/              # DomainExceptionHandler (IExceptionHandler → ProblemDetails)
+│   │   ├── Errors/              # DomainExceptionHandler (exception → ProblemDetails)
 │   │   ├── Filters/             # [InvalidateMenuCache]
 │   │   ├── Middleware/          # CorrelationId, RequestLogging
-│   │   ├── Mapping/             # Domain ⇄ DTO (projection)
-│   │   ├── Realtime/            # OrderHub (SignalR), IOrderNotifier
-│   │   └── Reports/             # Doanh thu theo ngày (stored procedure / LINQ)
+│   │   └── Realtime/            # OrderHub (SignalR)
 │   └── CyberCafe.Web/           # Blazor Web App (Interactive Server)
 │       ├── Components/Pages/    # Home, Menu, CartPage, Checkout, OrderConfirmation, Barista, Admin/MenuAdmin, Login, Register, MyOrders
 │       ├── Components/Shared/   # ProductCard, CartSummary, OrderStatusBadge
@@ -128,9 +141,11 @@ cybercafe/
 │       └── State/               # CartState (scoped + event OnChange)
 ├── tests/
 │   ├── CyberCafe.Tests/         # xUnit: Domain + Web (typed client với HttpMessageHandler giả)
-│   └── CyberCafe.Api.Tests/     # WebApplicationFactory + EF InMemory + SignalR qua TestServer
+│   ├── CyberCafe.Api.Tests/     # WebApplicationFactory + EF InMemory + SignalR qua TestServer
+│   └── CyberCafe.ArchitectureTests/ # (b48) luật phụ thuộc giữa các tầng (Reflection)
+├── docs/architecture.md         # sơ đồ tầng (Mermaid), đặt code mới ở đâu
 ├── docs/sessions/               # kịch bản live-code cho từng chặng
-├── docs/adr/                    # quyết định kiến trúc (ADR)
+├── docs/adr/                    # quyết định kiến trúc (ADR 0001, 0002...)
 ├── ROADMAP.md                   # kế hoạch các tag tiếp theo
 └── README.md
 ```
@@ -145,7 +160,7 @@ cybercafe/
 | `b28-cart-state` | 24–31 | Component, `[Parameter]`, `EventCallback`, binding, lifecycle, `CartState`, `EditForm` + validation, domain OOP | ✅ |
 | `b40-api-efcore` | 32–41 | `CyberCafe.Api` + typed `HttpClient`, EF Core SQL Server (Docker, TPH, migration, stored procedure), SignalR quầy barista | ✅ |
 | `b47-auth-cache` | 42–47 | JWT + BCrypt + refresh token, phân quyền, middleware, filter, Redis cache, rate limiting | ✅ |
-| `b48-clean-arch` | 48 | Clean Architecture: Domain / Application / Infrastructure / Api | ⏳ |
+| `b48-clean-arch` | 48 | Clean Architecture: Domain / Application / Infrastructure / Api, port + adapter, architecture test | ✅ |
 | `b53-ddd-cqrs` | 49–53 | Order aggregate, domain event, CQRS | ⏳ |
 | `b55-microservice` | 54–55 | .NET Aspire, YARP gateway, Order/Payment/Menu services, message broker | ⏳ |
 

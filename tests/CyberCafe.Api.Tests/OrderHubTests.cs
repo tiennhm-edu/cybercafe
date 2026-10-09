@@ -10,6 +10,7 @@ using System.Text.Json.Serialization;
 using CyberCafe.Contracts.Orders;
 using CyberCafe.Contracts.Realtime;
 using CyberCafe.Domain.Orders;
+using CyberCafe.Infrastructure.Identity;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.AspNetCore.TestHost;
@@ -37,7 +38,7 @@ public class OrderHubTests
         await using CyberCafeApiFactory factory = new() { UseRealNotifier = true };
         HttpClient client = await factory.CustomerAsync(); // khởi động TestServer + đăng nhập khách
         HttpClient baristaHttp = factory.CreateClient();
-        string baristaToken = (await baristaHttp.LoginAsync(Auth.DevAccountSeeder.BaristaEmail)).AccessToken;
+        string baristaToken = (await baristaHttp.LoginAsync(DevAccountSeeder.BaristaEmail)).AccessToken;
         string customerToken = client.DefaultRequestHeaders.Authorization!.Parameter!;
 
         await using HubConnection barista = Connect(factory.Server, baristaToken);

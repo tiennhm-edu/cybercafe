@@ -1,13 +1,15 @@
 // ============================================================================
-// AuthController.cs — /api/auth/* (Buổi 42–47 · JWT + refresh token + rate limiting).
+// AuthController.cs — /api/auth/* (Buổi 42–47 · 48 · JWT + refresh token + rate limiting).
 //   POST /api/auth/register   201 | 400 | 409 (email trùng) | 429
 //   POST /api/auth/login      200 | 401 | 429 (quá nhiều lần thử)
 //   POST /api/auth/refresh    200 | 401
 //   POST /api/auth/logout     204
 //   GET  /api/auth/me         200 | 401
 // Controller rất mỏng: lỗi (401/409) do AuthService ném exception, DomainExceptionHandler đổi thành HTTP.
+// Buổi 48: phụ thuộc IAuthService (Application) — không biết cài đặt ở Infrastructure dùng EF/BCrypt/JWT.
 // ============================================================================
 using CyberCafe.Api.Auth;
+using CyberCafe.Application.Auth;
 using CyberCafe.Contracts.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,7 +20,7 @@ namespace CyberCafe.Api.Controllers;
 /// <summary>Đăng ký / đăng nhập / làm mới token.</summary>
 [ApiController]
 [Route("api/auth")]
-public class AuthController(AuthService auth) : ControllerBase
+public class AuthController(IAuthService auth) : ControllerBase
 {
     /// <summary>Tên policy rate limit cho đăng nhập / đăng ký (khai báo trong Program.cs).</summary>
     public const string LoginRateLimit = "login";

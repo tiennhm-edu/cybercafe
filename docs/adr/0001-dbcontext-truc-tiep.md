@@ -2,7 +2,7 @@
 
 - **Trạng thái:** Chấp nhận (tag `b47-auth-cache`)
 - **Bối cảnh buổi học:** 42–47 (lab `dotnet-webapi-lab` tag `b45` đã dạy Repository + UoW)
-- **Xem lại ở:** `b48-clean-arch`
+- **Xem lại ở:** `b48-clean-arch` → đã xem lại: [ADR 0002](0002-clean-architecture-port-hep.md) thay thế một phần (Application dùng port hẹp; bên trong Infrastructure vẫn dùng `DbContext` trực tiếp như ADR này)
 
 ## Bối cảnh
 

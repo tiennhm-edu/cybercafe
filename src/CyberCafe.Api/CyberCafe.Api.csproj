@@ -3,6 +3,8 @@
   <!--
     CyberCafe.Api (Buổi 32–41): ASP.NET Core Web API (controllers) + EF Core SQL Server + SignalR.
     Buổi 42–47: JWT + BCrypt, Redis cache, rate limiting (có sẵn trong ASP.NET Core, không cần package).
+    Buổi 48 (Clean Architecture): Api chỉ còn là "cửa vào" — controller mỏng, hub, middleware, filter
+    + COMPOSITION ROOT (Program.cs gọi AddApplication / AddInfrastructure). Không còn DbContext, Migrations ở đây.
     Version package nằm trong Directory.Packages.props (Central Package Management).
   -->
   <PropertyGroup>
@@ -18,12 +20,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Scalar.AspNetCore" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
-    <!-- Buổi 42–47 -->
+    <!-- Buổi 42–47: middleware KIỂM TRA JWT ở cửa vào (phát JWT thì ở Infrastructure/Identity) -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
-    <PackageReference Include="BCrypt.Net-Next" />
-    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
-    <!-- Design: chỉ dùng lúc chạy lệnh dotnet ef (migrations), không đóng gói vào app -->
+    <!-- Buổi 48: EF Core SqlServer, BCrypt, Redis chuyển sang CyberCafe.Infrastructure.csproj -->
+    <!-- Design: chỉ dùng lúc chạy lệnh dotnet ef (Api là STARTUP project: -s src/CyberCafe.Api), không đóng gói vào app -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -31,8 +31,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\CyberCafe.Domain\CyberCafe.Domain.csproj" />
-    <ProjectReference Include="..\CyberCafe.Contracts\CyberCafe.Contracts.csproj" />
+    <ProjectReference Include="..\CyberCafe.Application\CyberCafe.Application.csproj" />
+    <!-- Tham chiếu Infrastructure CHỈ để Program.cs gọi AddInfrastructure() (composition root).
+         Controller không được dùng thẳng class nào của Infrastructure — architecture test kiểm tra. -->
+    <ProjectReference Include="..\CyberCafe.Infrastructure\CyberCafe.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

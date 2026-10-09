@@ -3,13 +3,14 @@
 // ============================================================================
 using System.Net;
 using System.Net.Http.Json;
-using CyberCafe.Api.Caching;
 using CyberCafe.Api.Controllers;
 using CyberCafe.Api.Errors;
 using CyberCafe.Api.Middleware;
+using CyberCafe.Application.Caching;
 using CyberCafe.Contracts.Orders;
 using CyberCafe.Contracts.Products;
 using CyberCafe.Domain.Products;
+using CyberCafe.Infrastructure.Caching;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;

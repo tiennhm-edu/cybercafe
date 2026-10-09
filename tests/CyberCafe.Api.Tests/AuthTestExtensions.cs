@@ -4,8 +4,8 @@
 // ============================================================================
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using CyberCafe.Api.Auth;
 using CyberCafe.Contracts.Auth;
+using CyberCafe.Infrastructure.Identity;
 
 namespace CyberCafe.Api.Tests;
 

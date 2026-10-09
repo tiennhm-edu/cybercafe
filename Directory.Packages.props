@@ -17,6 +17,12 @@
     <PackageVersion Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.12" />
   </ItemGroup>
+  <ItemGroup Label="Clean Architecture (Buổi 48)">
+    <!-- Application chỉ cần interface IServiceCollection để viết AddApplication() — gói Abstractions, MIT -->
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <!-- Infrastructure tạo JWT mà không cần cả middleware JwtBearer — cùng version JwtBearer đang kéo theo, MIT -->
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.19.2" />
+  </ItemGroup>
   <ItemGroup Label="EF Core">
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />

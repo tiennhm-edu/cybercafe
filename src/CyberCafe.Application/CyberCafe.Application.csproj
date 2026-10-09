@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    CyberCafe.Application (Buổi 48 · Clean Architecture): tầng USE CASE.
+    Chứa: service nghiệp vụ (MenuService, OrderService), interface "cổng" (port) mà tầng ngoài phải cài đặt
+    (IProductRepository, IOrderRepository, IUnitOfWork, IMenuCache, IOrderNotifier, IAuthService...),
+    mapping Domain → DTO, exception có nghĩa nghiệp vụ (NotFound/Validation/Conflict).
+    Luật vàng: KHÔNG tham chiếu EF Core, ASP.NET Core hay Infrastructure (architecture test kiểm tra).
+    ⚠️ Lỗi hay gặp: thêm PackageReference EF Core vào đây "cho tiện viết LINQ" → Application dính chặt database.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Chỉ gói "Abstractions" (interface IServiceCollection) để viết AddApplication(); không kéo ASP.NET Core theo -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CyberCafe.Domain\CyberCafe.Domain.csproj" />
+    <ProjectReference Include="..\CyberCafe.Contracts\CyberCafe.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

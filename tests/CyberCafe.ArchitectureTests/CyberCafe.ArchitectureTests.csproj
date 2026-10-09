@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Architecture test (Buổi 48 · Clean Architecture): "luật phụ thuộc giữa các tầng" được KIỂM TRA TỰ ĐỘNG,
+    không chỉ vẽ trên slide. Ai lỡ thêm "using Microsoft.EntityFrameworkCore" vào Application → CI đỏ.
+    Không dùng thêm package (NetArchTest / ArchUnitNET): chỉ cần Reflection đọc danh sách assembly mà mỗi
+    assembly THỰC SỰ tham chiếu (Assembly.GetReferencedAssemblies) + kiểm tra kiểu trong assembly.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tham chiếu MỌI tầng để nạp được assembly của chúng (Api kéo theo Application/Infrastructure/Domain/Contracts) -->
+    <ProjectReference Include="..\..\src\CyberCafe.Api\CyberCafe.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
