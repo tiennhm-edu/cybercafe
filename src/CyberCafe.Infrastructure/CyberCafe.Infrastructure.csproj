@@ -7,6 +7,7 @@
       Caching/      MenuCache trên IDistributedCache (Redis hoặc RAM)
       Realtime/     SignalROrderNotifier<THub> (adapter của IOrderNotifier)
       Reports/      Doanh thu: stored procedure / LINQ
+      Messaging/    (Buổi 55) Outbox + dispatcher, inbox, consumer MassTransit (RabbitMQ) cho kết quả thanh toán
     Chiều phụ thuộc: Infrastructure → Application → Domain. Api tham chiếu Infrastructure CHỈ để gọi AddInfrastructure().
     Version package nằm trong Directory.Packages.props (Central Package Management).
   -->
@@ -25,6 +26,9 @@
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
     <!-- Chỉ cần thư viện TẠO JWT; middleware kiểm tra JWT (JwtBearer) vẫn nằm ở Api -->
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+    <!-- Buổi 55: MassTransit 8.x (Apache-2.0) — KHÔNG nâng lên 9.x (thương mại). Xem ADR 0004. -->
+    <PackageReference Include="MassTransit" />
+    <PackageReference Include="MassTransit.RabbitMQ" />
   </ItemGroup>
 
   <ItemGroup>

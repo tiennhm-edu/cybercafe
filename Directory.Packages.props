@@ -1,6 +1,6 @@
 <Project>
   <!--
-    Central Package Management (Buổi 32–41): khai báo VERSION của mọi NuGet package tại 1 chỗ.
+    Central Package Management (Buổi 32–41 · 55): khai báo VERSION của mọi NuGet package tại 1 chỗ.
     File .csproj chỉ ghi <PackageReference Include="..." /> (không có Version).
     Lợi ích: Api, Web, Tests luôn dùng CÙNG version → không lệch EF Core 10.0.11 vs 10.0.12.
     Version khớp với lab dotnet-webapi-lab để lớp không phải tải 2 bộ package.
@@ -28,6 +28,33 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     <!-- ValidationBehavior: validator cho command/query — FluentValidation, Apache-2.0 (KHÔNG dùng MediatR 13+: giấy phép thương mại, xem ADR 0003) -->
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
+  </ItemGroup>
+  <ItemGroup Label="Microservice (Buổi 54–55)">
+    <!--
+      Đã kiểm tra giấy phép từng gói (nuspec trên nuget.org) — chỉ MIT / Apache-2.0:
+        Aspire.Hosting.*                      13.6.1  MIT        (AppHost: khai báo container + project; SDK ghi ở AppHost.csproj)
+        Yarp.ReverseProxy                     2.3.0   MIT        (API Gateway)
+        Microsoft.Extensions.ServiceDiscovery 10.10.0 MIT        (+ .Yarp: YARP tìm "http://api" qua service discovery)
+        Microsoft.Extensions.Http.Resilience  10.10.0 MIT        (AddStandardResilienceHandler; kéo theo Polly.Core — BSD-3-Clause, gói phụ thuộc của Microsoft)
+        OpenTelemetry.*                       1.19.x  Apache-2.0 (trace / metric / log → Aspire dashboard qua OTLP)
+        MassTransit, MassTransit.RabbitMQ     8.5.11  Apache-2.0 (kéo theo RabbitMQ.Client 7.x — Apache-2.0 OR MPL-2.0)
+      ⚠️ Lỗi hay gặp: "dotnet add package MassTransit" lấy bản MỚI NHẤT = v9 — giấy phép THƯƠNG MẠI (cần license key).
+         Khóa ở 8.x (Apache-2.0) — lý do và kế hoạch thay thế ghi ở docs/adr/0004-rabbitmq-masstransit-v8.md.
+    -->
+    <PackageVersion Include="Aspire.Hosting.SqlServer" Version="13.6.1" />
+    <PackageVersion Include="Aspire.Hosting.Redis" Version="13.6.1" />
+    <PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="13.6.1" />
+    <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery.Yarp" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.19.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
+    <PackageVersion Include="MassTransit" Version="8.5.11" />
+    <PackageVersion Include="MassTransit.RabbitMQ" Version="8.5.11" />
   </ItemGroup>
   <ItemGroup Label="EF Core">
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />

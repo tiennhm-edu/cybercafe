@@ -22,6 +22,9 @@
   <ItemGroup>
     <!-- Tham chiếu MỌI tầng để nạp được assembly của chúng (Api kéo theo Application/Infrastructure/Domain/Contracts) -->
     <ProjectReference Include="..\..\src\CyberCafe.Api\CyberCafe.Api.csproj" />
+    <!-- Buổi 54–55: các service tách ra — để kiểm RANH GIỚI giữa service (ServiceBoundaryTests) -->
+    <ProjectReference Include="..\..\src\CyberCafe.Payment.Api\CyberCafe.Payment.Api.csproj" />
+    <ProjectReference Include="..\..\src\CyberCafe.Gateway\CyberCafe.Gateway.csproj" />
   </ItemGroup>
 
   <ItemGroup>

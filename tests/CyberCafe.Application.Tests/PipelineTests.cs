@@ -1,5 +1,5 @@
 // ============================================================================
-// PipelineTests.cs — dispatcher + pipeline behavior + domain event publisher (Buổi 51–52).
+// PipelineTests.cs — dispatcher + pipeline behavior + domain event publisher (Buổi 51–52 · 55).
 // Dựng DI THẬT bằng AddApplication() (giống Program.cs), chỉ thay port bằng bản giả → kiểm tra đúng
 // cái mà Api sẽ chạy: thứ tự Logging → Validation → Transaction → Handler.
 // 👉 Bước 5 (b52.md)
@@ -45,6 +45,9 @@ public class PipelineTests
         services.AddSingleton<IOrderReadStore>(new FakeOrderReadStore());
         services.AddSingleton<IOrderNotifier>(new RecordingNotifier());
         services.AddSingleton<IMenuCache>(new PassThroughCache());
+        // Buổi 55: handler kết quả thanh toán (ConfirmOrderPayment...) cần IInbox; PlaceOrder nhận thêm outbox (tùy chọn)
+        services.AddSingleton<IInbox>(new FakeInbox());
+        services.AddSingleton<IIntegrationEventOutbox>(new RecordingOutbox());
         extra?.Invoke(services);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }
@@ -140,7 +143,7 @@ public class PipelineTests
             Assert.NotNull(scope.ServiceProvider.GetService(typeof(IRequestHandler<,>).MakeGenericType(request, response)));
         }
 
-        Assert.True(requests.Length >= 8); // 3 command đơn + 3 query đơn + 2 query thực đơn
+        Assert.True(requests.Length >= 10); // 3 command đơn + 3 query đơn + 2 query thực đơn + (b55) 2 command kết quả thanh toán
     }
 
     // Kiểm tra: publisher gọi MỌI handler của event; 1 handler lỗi không chặn handler khác và không ném ra ngoài.

@@ -7,8 +7,12 @@
 //               Redis cache, rate limiting, seed tài khoản dev.
 //   Buổi 48: COMPOSITION ROOT của Clean Architecture — DbContext, JWT/BCrypt, Redis... không đăng ký ở đây nữa
 //            mà qua AddApplication() + AddInfrastructure(). File này chỉ còn phần của "cửa vào" HTTP.
+//   Buổi 54–55: Api = "Order service" dưới .NET Aspire: AddServiceDefaults (OpenTelemetry, health, discovery),
+//            đứng SAU gateway YARP (UseForwardedHeaders), tự migrate DB khi AppHost yêu cầu,
+//            thanh toán qua Payment service + RabbitMQ khi Payments:Flow = Messaging (cấu hình trong AddInfrastructure).
 // Vẫn 2 phần như Web: (1) builder.Services... đăng ký DI; (2) app.Use/Map... cấu hình pipeline.
-// Chạy: docker compose up -d
+// Chạy (b55): dotnet run --project src/CyberCafe.AppHost   → Aspire dashboard mở các service (xem README)
+// Chạy lẻ kiểu b40–b53: docker compose up -d
 //       → dotnet ef database update -p src/CyberCafe.Infrastructure -s src/CyberCafe.Api
 //       → dotnet run --project src/CyberCafe.Api → http://localhost:5180/scalar/v1
 // ============================================================================
@@ -25,7 +29,10 @@ using CyberCafe.Contracts.Auth;
 using CyberCafe.Contracts.Realtime;
 using CyberCafe.Infrastructure;
 using CyberCafe.Infrastructure.Identity;
+using CyberCafe.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
@@ -33,6 +40,9 @@ using Scalar.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 
 // ===== 1. Đăng ký service =====
+
+// 👉 Bước 3 (b54.md): OpenTelemetry + health check + service discovery + resilience — giống MỌI service khác.
+builder.AddServiceDefaults();
 
 // 👉 Bước 1 (b40.md): controllers + JSON enum dạng chuỗi ("Pending" thay vì 0) — khớp với Web client.
 builder.Services.AddControllers()
@@ -133,12 +143,22 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
+// 👉 Bước 5 (b54.md): Api đứng SAU gateway → IP kết nối tới luôn là IP của gateway. Gateway (YARP) gửi IP thật
+// của client trong header X-Forwarded-For. Không đọc header này → rate limiter đăng nhập gom MỌI người vào 1 "xô".
+// Chỉ tin header từ proxy đã biết (mặc định: localhost — gateway chạy cùng máy dưới AppHost).
+// ⚠️ Lỗi hay gặp: KnownProxies.Clear() "cho chạy được" → ai cũng giả được IP bằng cách tự gửi X-Forwarded-For.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost);
+
 // Không cần CORS: Web là Blazor SERVER → gọi API và hub từ máy chủ Web (server-to-server),
 // trình duyệt không gọi thẳng API. CORS chỉ cần khi JavaScript trên trình duyệt gọi sang origin khác.
 
 var app = builder.Build();
 
 // ===== 2. Pipeline — THỨ TỰ = thứ tự request đi qua (response đi ngược lại) =====
+
+// (0) Buổi 54: đọc X-Forwarded-* TRƯỚC mọi middleware khác (log, rate limit dùng IP thật của client).
+app.UseForwardedHeaders();
 
 // 👉 Bước 6 (b47.md)
 // (1) Correlation id ngoài cùng: mọi thứ phía sau (kể cả log lỗi) đều có mã.
@@ -171,6 +191,17 @@ app.UseRateLimiter();
 
 app.MapControllers();
 app.MapHub<OrderHub>(OrderHubContract.Path); // ws://localhost:5180/hubs/orders
+app.MapDefaultEndpoints();                   // Buổi 54: /health, /alive (Development) — AppHost chờ /health trước khi mở gateway
+
+// 👉 Bước 4 (b54.md): dưới AppHost database là container MỚI → tự áp migration lúc khởi động (AppHost đặt
+// Database__MigrateOnStartup=true). Chạy kiểu cũ vẫn dùng "dotnet ef database update" như b40–b53.
+// ⚠️ Lỗi hay gặp: bật Migrate() ở môi trường thật có NHIỀU instance → các instance tranh nhau migrate cùng lúc.
+//    Production: chạy migration 1 lần trong pipeline deploy (dotnet ef migrations bundle), không trong app.
+if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
+{
+    using IServiceScope scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<CyberCafeDbContext>().Database.MigrateAsync();
+}
 
 // Seed tài khoản dev (chỉ khi Seed:DevAccounts = true — xem Infrastructure/Identity/DevAccountSeeder.cs)
 await DevAccountSeeder.SeedAsync(app.Services);

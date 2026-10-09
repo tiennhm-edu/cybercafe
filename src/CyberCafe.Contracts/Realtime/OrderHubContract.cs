@@ -1,5 +1,5 @@
 // ============================================================================
-// OrderHubContract.cs — "hợp đồng" SignalR giữa Api (OrderHub) và Web (HubConnection) (Buổi 33–34).
+// OrderHubContract.cs — "hợp đồng" SignalR giữa Api (OrderHub) và Web (HubConnection) (Buổi 33–34 · 55).
 // SignalR gọi method theo TÊN dạng chuỗi. Gõ sai 1 chữ ("OrderPlace" thay vì "OrderPlaced")
 // → không lỗi biên dịch, không exception, chỉ là... không bao giờ nhận được sự kiện.
 // Gom tên vào hằng số dùng chung 2 phía để compiler bắt lỗi giúp ta.
@@ -14,7 +14,10 @@ public static class OrderHubContract
 
     // ----- Server → Client (client đăng ký bằng connection.On<OrderDto>(...)) -----
 
-    /// <summary>Có đơn mới (gửi tới group baristas).</summary>
+    /// <summary>
+    /// Có đơn mới ĐÃ THANH TOÁN (gửi tới group baristas). Buổi 55: gửi thêm cho group order-{id} — thanh toán
+    /// đến sau từ Payment service, trang của khách cần biết để đổi "Đang xử lý thanh toán" thành "thành công".
+    /// </summary>
     public const string OrderPlaced = "OrderPlaced";
 
     /// <summary>Đơn đổi trạng thái (gửi tới group baristas và group order-{id}).</summary>

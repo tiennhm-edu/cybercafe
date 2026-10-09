@@ -1,5 +1,5 @@
 // ============================================================================
-// IOrderNotifier.cs — cổng thông báo realtime về đơn hàng (Buổi 33–34 · 48 · 50).
+// IOrderNotifier.cs — cổng thông báo realtime về đơn hàng (Buổi 33–34 · 48 · 50 · 55).
 // Buổi 33–34: interface + bản SignalR nằm chung file Api/Realtime/OrderNotifier.cs.
 // Buổi 48: TÁCH ĐÔI theo Clean Architecture:
 //   - Interface (file này) ở Application: use case chỉ cần "báo cho quầy biết", không cần biết SignalR.
@@ -15,7 +15,7 @@ namespace CyberCafe.Application.Orders;
 /// <summary>Thông báo realtime về đơn hàng.</summary>
 public interface IOrderNotifier
 {
-    /// <summary>Báo quầy barista có đơn mới.</summary>
+    /// <summary>Báo quầy barista có đơn mới (đã thanh toán); b55: kèm khách đang xem đơn đó.</summary>
     Task OrderPlacedAsync(OrderDto order, CancellationToken ct = default);
 
     /// <summary>Báo barista + khách đang xem đơn: trạng thái vừa đổi.</summary>

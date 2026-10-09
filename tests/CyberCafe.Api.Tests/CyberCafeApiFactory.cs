@@ -6,6 +6,8 @@
 //   2) IOrderNotifier → bản ghi lại (để kiểm tra "đã báo barista chưa") — trừ khi test hub thật.
 //   3) (Buổi 42–47) Cấu hình test: khóa JWT giả, seed 3 tài khoản dev, BCrypt work factor 4 (chạy nhanh),
 //      rate limit đăng nhập rất cao (trừ test rate limit), cache trong RAM (không cần Redis).
+//   4) (Buổi 55) PaymentFlow = Messaging (tùy chọn): không có ConnectionStrings:messaging → MassTransit dùng bus
+//      TRONG BỘ NHỚ của chính Api — outbox worker, consumer PaymentCompleted/Failed chạy thật, không cần RabbitMQ.
 // ⚠️ InMemory KHÔNG phải SQL thật: không kiểm tra khóa ngoại, Contains phân biệt hoa/thường,
 //    không chạy được SQL thô (stored procedure) → phần SP được kiểm thử tay với Docker (docs/sessions/b40.md).
 // ============================================================================
@@ -50,6 +52,9 @@ public class CyberCafeApiFactory : WebApplicationFactory<Program>
     /// <summary>true = giữ SignalROrderNotifier thật (test hub); false = dùng bản ghi lại.</summary>
     public bool UseRealNotifier { get; init; }
 
+    /// <summary>Buổi 55: "Messaging" = thanh toán qua outbox + bus (mặc định null = InProcess như b53).</summary>
+    public string? PaymentFlow { get; init; }
+
     /// <summary>Các sự kiện đã "gửi" (khi không dùng notifier thật).</summary>
     public RecordingOrderNotifier Notifier { get; } = new();
 
@@ -62,6 +67,11 @@ public class CyberCafeApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Auth:BCryptWorkFactor", "4"); // 4 = mức thấp nhất của BCrypt → test nhanh
         builder.UseSetting("RateLimiting:LoginPermitLimit", this.LoginPermitLimit.ToString());
         builder.UseSetting("Redis:Enabled", "false");
+        if (this.PaymentFlow is not null)
+        {
+            builder.UseSetting("Payments:Flow", this.PaymentFlow);
+            builder.UseSetting("Outbox:PollingIntervalMs", "50"); // test không phải chờ 1 giây mỗi lượt quét
+        }
 
         builder.ConfigureTestServices(services =>
         {

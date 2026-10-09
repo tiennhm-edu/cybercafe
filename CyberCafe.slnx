@@ -6,11 +6,18 @@
     <Project Path="src/CyberCafe.Infrastructure/CyberCafe.Infrastructure.csproj" />
     <Project Path="src/CyberCafe.Api/CyberCafe.Api.csproj" />
     <Project Path="src/CyberCafe.Web/CyberCafe.Web.csproj" />
+    <Project Path="src/CyberCafe.IntegrationEvents/CyberCafe.IntegrationEvents.csproj" />
+    <Project Path="src/CyberCafe.ServiceDefaults/CyberCafe.ServiceDefaults.csproj" />
+    <Project Path="src/CyberCafe.Payment.Api/CyberCafe.Payment.Api.csproj" />
+    <Project Path="src/CyberCafe.Gateway/CyberCafe.Gateway.csproj" />
+    <Project Path="src/CyberCafe.AppHost/CyberCafe.AppHost.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CyberCafe.Tests/CyberCafe.Tests.csproj" />
     <Project Path="tests/CyberCafe.Api.Tests/CyberCafe.Api.Tests.csproj" />
     <Project Path="tests/CyberCafe.Application.Tests/CyberCafe.Application.Tests.csproj" />
     <Project Path="tests/CyberCafe.ArchitectureTests/CyberCafe.ArchitectureTests.csproj" />
+    <Project Path="tests/CyberCafe.Payment.Tests/CyberCafe.Payment.Tests.csproj" />
+    <Project Path="tests/CyberCafe.Gateway.Tests/CyberCafe.Gateway.Tests.csproj" />
   </Folder>
 </Solution>

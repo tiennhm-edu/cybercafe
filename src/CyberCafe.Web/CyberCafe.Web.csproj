@@ -4,6 +4,8 @@
     <ProjectReference Include="..\CyberCafe.Domain\CyberCafe.Domain.csproj" />
     <!-- Buổi 32–41: DTO dùng chung với Api (ProductDto, OrderDto, PlaceOrderRequest...) -->
     <ProjectReference Include="..\CyberCafe.Contracts\CyberCafe.Contracts.csproj" />
+    <!-- Buổi 54: OpenTelemetry, health, service discovery ("http://gateway"), resilience cho mọi HttpClient -->
+    <ProjectReference Include="..\CyberCafe.ServiceDefaults\CyberCafe.ServiceDefaults.csproj" />
   </ItemGroup>
 
   <ItemGroup>

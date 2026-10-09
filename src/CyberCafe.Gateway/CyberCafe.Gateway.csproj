@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    CyberCafe.Gateway (Buổi 54): API GATEWAY bằng YARP (Yet Another Reverse Proxy, MIT, của Microsoft).
+    Cửa DUY NHẤT mà Web (và Internet) nhìn thấy:
+      /api/*      → service "api"      (Order + Menu + Identity — CyberCafe.Api)
+      /hubs/*     → service "api"      (SignalR OrderHub, WebSocket đi xuyên qua YARP)
+      /payments/* → service "payment"  (CyberCafe.Payment.Api) — gateway KIỂM JWT, chỉ Admin
+    Địa chỉ "http://api", "http://payment" là TÊN resource trong AppHost → service discovery đổi thành địa chỉ thật.
+    Không tham chiếu project service nào (chỉ ServiceDefaults): gateway chỉ biết URL, không biết code.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Yarp.ReverseProxy" />
+    <!-- YARP hỏi service discovery "http://api là đâu?" thay vì ghi cứng localhost:5180 -->
+    <PackageReference Include="Microsoft.Extensions.ServiceDiscovery.Yarp" />
+    <!-- Kiểm JWT tập trung cho route /payments/* (cùng khóa/issuer/audience với Api) -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CyberCafe.ServiceDefaults\CyberCafe.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+</Project>

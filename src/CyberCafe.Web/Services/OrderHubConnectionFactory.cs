@@ -5,6 +5,7 @@
 // Mỗi trang (Barista, OrderConfirmation) tự tạo 1 kết nối và tự Dispose khi rời trang.
 // Buổi 42–47: hub đòi JWT → truyền hàm lấy token (AccessTokenProvider). SignalR gọi hàm này mỗi lần
 // kết nối/kết nối lại → luôn lấy token CÒN HẠN từ AuthSession (tự refresh nếu cần).
+// Buổi 54: dưới AppHost địa chỉ truyền vào là GATEWAY (HubBaseUrl) — YARP chuyển cả negotiate lẫn WebSocket tới Api.
 // ============================================================================
 using System.Text.Json.Serialization;
 using CyberCafe.Contracts.Realtime;
@@ -13,7 +14,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 namespace CyberCafe.Web.Services;
 
 /// <summary>Đóng gói cấu hình HubConnection để các trang không lặp lại URL/JSON/reconnect.</summary>
-/// <param name="apiBaseUrl">Địa chỉ gốc của Api (đọc từ cấu hình "ApiBaseUrl").</param>
+/// <param name="apiBaseUrl">Địa chỉ gốc chứa /hubs/orders: Api (b40–b53, "ApiBaseUrl") hoặc gateway (b54+, "HubBaseUrl").</param>
 public class OrderHubConnectionFactory(Uri apiBaseUrl)
 {
     private readonly Uri _hubUrl = new(apiBaseUrl, OrderHubContract.Path.TrimStart('/'));

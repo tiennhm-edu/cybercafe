@@ -8,6 +8,7 @@
     Luật vàng: KHÔNG tham chiếu EF Core, ASP.NET Core hay Infrastructure (architecture test kiểm tra).
     Buổi 49–53 (CQRS): thêm dispatcher tự viết (Common/Messaging), pipeline behavior (Common/Behaviors),
     command/query + handler theo từng use case (Orders/Commands, Orders/Queries, Products/Queries).
+    Buổi 55: port IIntegrationEventOutbox / IInbox (Outbox + idempotent consumer) — vẫn KHÔNG biết MassTransit/RabbitMQ.
     ⚠️ Lỗi hay gặp: thêm PackageReference EF Core vào đây "cho tiện viết LINQ" → Application dính chặt database.
   -->
   <PropertyGroup>
@@ -25,6 +26,8 @@
   <ItemGroup>
     <ProjectReference Include="..\CyberCafe.Domain\CyberCafe.Domain.csproj" />
     <ProjectReference Include="..\CyberCafe.Contracts\CyberCafe.Contracts.csproj" />
+    <!-- Buổi 55: hợp đồng message giữa các service (record thuần BCL) — để command handler ghi event vào outbox -->
+    <ProjectReference Include="..\CyberCafe.IntegrationEvents\CyberCafe.IntegrationEvents.csproj" />
   </ItemGroup>
 
 </Project>

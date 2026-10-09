@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    CyberCafe.ServiceDefaults (Buổi 54 · .NET Aspire): cấu hình "chuẩn" mà MỌI service dùng chung, gọi 1 dòng:
+      builder.AddServiceDefaults();   // Api, Payment.Api, Gateway, Web
+    Gồm: OpenTelemetry (trace/metric/log → Aspire dashboard), health check (/health, /alive),
+    service discovery ("http://api" → địa chỉ thật), resilience cho HttpClient (retry, circuit breaker, timeout).
+    IsAspireSharedProject: AppHost biết đây là thư viện dùng chung, KHÔNG phải 1 service để chạy.
+    Version package nằm trong Directory.Packages.props (giấy phép đã kiểm tra: MIT / Apache-2.0).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAspireSharedProject>true</IsAspireSharedProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Microsoft.Extensions.ServiceDiscovery" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
+  </ItemGroup>
+
+</Project>

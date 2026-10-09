@@ -18,12 +18,14 @@ jobs:
         with:
           global-json-file: global.json
 
+      # b55: CyberCafe.AppHost dùng gói NuGet "Aspire.AppHost.Sdk" (không cần workload) — restore tự tải
+      # dashboard + DCP cho linux-x64. Build được không cần Docker; chỉ CHẠY AppHost mới cần Docker.
       - name: Restore
         run: dotnet restore CyberCafe.slnx
 
       - name: Build
         run: dotnet build CyberCafe.slnx --no-restore -c Release
 
-      # Không cần SQL Server/Docker: test tích hợp Api dùng EF Core InMemory
+      # Không cần SQL Server/RabbitMQ/Docker: test tích hợp dùng EF Core InMemory + bus MassTransit trong bộ nhớ
       - name: Test
         run: dotnet test CyberCafe.slnx --no-build -c Release --verbosity normal

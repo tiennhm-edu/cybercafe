@@ -1,0 +1,84 @@
+@* ==========================================================================
+   PaymentsAdmin.razor — trang /admin/payments: giao dịch từ PAYMENT SERVICE (Buổi 54–55).
+   Đường đi của 1 lần tải trang: Web ──(Bearer token)──► Gateway [kiểm JWT, chỉ Admin] ──► Payment.Api ──► CyberCafePayments
+   Dữ liệu này KHÔNG nằm trong database của Api (Order service) — mỗi service 1 database.
+   Chạy kiểu cũ (Api lẻ, không gateway) → /payments không tồn tại → trang báo lỗi rõ ràng, phần còn lại của Web vẫn chạy.
+   ========================================================================== *@
+@page "/admin/payments"
+@attribute [Authorize(Roles = Roles.Admin)]
+@inject PaymentApiClient PaymentApi
+
+<PageTitle>CyberCafe — Giao dịch thanh toán</PageTitle>
+
+<h1>Giao dịch thanh toán</h1>
+<p class="text-muted">Dữ liệu từ Payment service (qua API Gateway). Đơn bị từ chối sẽ bị hủy tự động bên Order service.</p>
+
+@if (_error is not null)
+{
+    <div class="alert alert-warning">
+        @_error
+        <div class="small">Trang này cần chạy dưới AppHost: <code>dotnet run --project src/CyberCafe.AppHost</code>.</div>
+    </div>
+}
+else if (_payments is null)
+{
+    <p><span class="spinner-border spinner-border-sm"></span> Đang tải...</p>
+}
+else if (_payments.Count == 0)
+{
+    <p>Chưa có giao dịch nào.</p>
+}
+else
+{
+    <table class="table table-sm align-middle">
+        <thead>
+            <tr><th>Đơn</th><th>Thời gian</th><th>Hình thức</th><th class="text-end">Số tiền</th><th>Kết quả</th><th>Mã giao dịch</th></tr>
+        </thead>
+        <tbody>
+            @foreach (PaymentSummary p in _payments)
+            {
+                <tr>
+                    <td>@p.OrderCode</td>
+                    @* Payment service lưu UTC (các service có thể ở múi giờ khác nhau) → đổi sang giờ máy khi hiển thị *@
+                    <td>@p.ProcessedAtUtc.ToLocalTime().ToString("HH:mm:ss dd/MM")</td>
+                    <td>@p.Method @(p.CardLast4 is null ? "" : $"****{p.CardLast4}")</td>
+                    <td class="text-end">@p.Amount.ToString("N0") đ</td>
+                    <td>
+                        @if (p.Status == "Succeeded")
+                        {
+                            <span class="badge bg-success">Thành công</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-danger">Từ chối</span> <small>@p.FailureReason</small>
+                        }
+                    </td>
+                    <td><code>@p.TransactionId</code></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<button class="btn btn-outline-secondary" @onclick="LoadAsync">Tải lại</button>
+
+@code {
+    private IReadOnlyList<PaymentSummary>? _payments;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _payments = await PaymentApi.GetRecentAsync();
+            _error = null;
+        }
+        catch (ApiException ex)
+        {
+            // 401/403 (gateway từ chối), 404 (không có gateway), 503 (Payment service tắt — resilience đã thử lại)
+            _error = $"Không tải được giao dịch: {ex.Message}";
+        }
+    }
+}

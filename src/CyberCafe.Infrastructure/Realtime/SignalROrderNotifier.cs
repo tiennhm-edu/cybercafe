@@ -1,5 +1,5 @@
 // ============================================================================
-// SignalROrderNotifier.cs — gửi sự kiện SignalR từ BÊN NGOÀI hub (Buổi 33–34 · 48 · IHubContext, adapter).
+// SignalROrderNotifier.cs — gửi sự kiện SignalR từ BÊN NGOÀI hub (Buổi 33–34 · 48 · 55 · IHubContext, adapter).
 // Code nghiệp vụ không phải hub, không có Clients → xin IHubContext<THub, IOrderClient> qua DI.
 // Bọc sau interface IOrderNotifier (Application) để:
 //   - Use case (b48 OrderService, b50+ handler domain event) không phụ thuộc SignalR.
@@ -8,6 +8,8 @@
 //   Vướng mắc: IHubContext<OrderHub, ...> cần KIỂU OrderHub, mà OrderHub là "cửa vào" nằm ở Api —
 //   Infrastructure KHÔNG được tham chiếu Api (sẽ thành vòng tròn). Cách gỡ: class GENERIC theo THub.
 //   Api (composition root) mới chọn THub = OrderHub: services.AddOrderNotifier<OrderHub>().
+// Buổi 55: OrderPlaced gửi thêm cho group order-{id}: thanh toán giờ đến SAU (Payment service) → trang của khách
+//   đang mở cần biết "đã thanh toán xong" để đổi "Đang xử lý thanh toán" thành "Đặt hàng thành công".
 // ============================================================================
 using CyberCafe.Application.Orders;
 using CyberCafe.Contracts.Orders;
@@ -25,7 +27,9 @@ public class SignalROrderNotifier<THub>(IHubContext<THub, IOrderClient> hub, ILo
 {
     /// <inheritdoc />
     public Task OrderPlacedAsync(OrderDto order, CancellationToken ct = default) =>
-        this.SafeSendAsync(() => hub.Clients.Group(OrderHubContract.BaristasGroup).OrderPlaced(order), order.Code);
+        this.SafeSendAsync(
+            () => hub.Clients.Groups([OrderHubContract.BaristasGroup, OrderHubContract.OrderGroup(order.Id)]).OrderPlaced(order),
+            order.Code);
 
     /// <inheritdoc />
     public Task OrderStatusChangedAsync(OrderDto order, CancellationToken ct = default) =>

@@ -1,5 +1,6 @@
 // ============================================================================
-// DependencyInjection.cs — đăng ký service của tầng Application (Buổi 48 · composition root; Buổi 51–52 · CQRS).
+// DependencyInjection.cs — đăng ký service của tầng Application (Buổi 48 · composition root; Buổi 51–52 · CQRS;
+//                          Buổi 55 · OrderingSettings).
 // Mỗi tầng tự "khai báo" service của mình qua 1 extension method:
 //   builder.Services.AddApplication();                          // file này
 //   builder.Services.AddInfrastructure(builder.Configuration);  // Infrastructure/DependencyInjection.cs
@@ -9,9 +10,11 @@
 // ============================================================================
 using CyberCafe.Application.Common.Behaviors;
 using CyberCafe.Application.Common.Messaging;
+using CyberCafe.Application.Orders;
 using CyberCafe.Application.Products;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CyberCafe.Application;
 
@@ -28,6 +31,10 @@ public static class DependencyInjection
         // ⚠️ Lỗi hay gặp: đăng ký Singleton → giữ IUnitOfWork (DbContext Scoped) của request ĐẦU TIÊN
         //    → lỗi "Cannot consume scoped service from singleton" hoặc dùng chung DbContext đa luồng.
         services.AddScoped<MenuService>();
+
+        // Buổi 55: mặc định thanh toán ngay (InProcess, giống b53). TryAdd = "chỉ thêm nếu chưa ai đăng ký" →
+        // Infrastructure (AddInfrastructure, đọc Payments:Flow) đăng ký TRƯỚC hay SAU đều thắng được giá trị mặc định này.
+        services.TryAddSingleton(OrderingSettings.Default);
 
         // Dispatcher + bộ phát domain event (Buổi 50–51)
         services.AddScoped<ISender, Sender>();

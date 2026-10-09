@@ -5,6 +5,8 @@
 #   docker compose down             # dừng (dữ liệu vẫn còn trong volume)
 #   docker compose down -v          # dừng + XÓA dữ liệu (làm lại từ đầu)
 # Mật khẩu / cổng lấy từ file .env (copy từ .env.example). Không có .env → dùng giá trị mặc định sau dấu ":-".
+# Từ tag b55-microservice: cách chạy chính là .NET Aspire (dotnet run --project src/CyberCafe.AppHost) — file này giữ
+# cho các tag b40–b53 và cho việc chạy Api lẻ (thanh toán InProcess, không RabbitMQ).
 # Cổng host mặc định 1434 / 6380 (không phải 1433 / 6379) để chạy song song với container của lab nếu đang bật.
 # ============================================================================
 name: cybercafe

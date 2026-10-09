@@ -19,7 +19,7 @@ Mỗi tag = 1 commit trên `main`, đã `dotnet build` + `dotnet test` xanh. Gi�
 | `b47-auth-cache` | 42–47 | JWT + BCrypt + refresh token, phân quyền theo vai trò, middleware, filter, Redis cache, rate limiting | ✅ done |
 | `b48-clean-arch` | 48 | Domain / Application / Infrastructure / Api, architecture test, không đổi hành vi | ✅ done |
 | `b53-ddd-cqrs` | 49–53 | Order aggregate, value object, domain event, CQRS (dispatcher tự viết), pipeline behavior, read model | ✅ done |
-| `b55-microservice` | 54–55 | .NET Aspire AppHost, YARP gateway, tách Menu/Order/Payment service, message broker | ⏳ planned |
+| `b55-microservice` | 54–55 | .NET Aspire AppHost, YARP gateway, tách Payment service, RabbitMQ (MassTransit 8), Outbox, idempotent consumer | ✅ done |
 
 > Thứ tự commit = thứ tự trong bảng. Mỗi tag gom trọn 1 chặng, không chồng buổi: 32–41 → 42–47 → 48 → 49–53 → 54–55.
 
@@ -115,16 +115,19 @@ Mục tiêu: mô hình hóa nghiệp vụ đơn hàng chặt chẽ + tách đọ
 
 Kịch bản: [b49](docs/sessions/b49.md) · [b50](docs/sessions/b50.md) · [b51](docs/sessions/b51.md) · [b52](docs/sessions/b52.md) · [b53](docs/sessions/b53.md)
 
-## ⏳ `b55-microservice` — Buổi 54–55
+## ✅ `b55-microservice` — Buổi 54–55
 
-Mục tiêu: tách hệ thống thành các service độc lập, điều phối bằng .NET Aspire.
+Mục tiêu: tách hệ thống thành các service độc lập, điều phối bằng .NET Aspire. Chạy: `dotnet run --project src/CyberCafe.AppHost` (cần Docker).
 
-- [ ] `CyberCafe.AppHost` (.NET Aspire) + `CyberCafe.ServiceDefaults` (OpenTelemetry, health check, service discovery)
-- [ ] Tách service: `Menu.Api`, `Order.Api`, `Payment.Api` — mỗi service 1 database riêng
-- [ ] API Gateway **YARP**: route `/menu/*`, `/orders/*`, `/payments/*`, gắn auth JWT tập trung
-- [ ] Message broker: **RabbitMQ** (MassTransit) *hoặc* **Kafka** — chọn 1, ghi lý do trong ADR
-- [ ] Luồng sự kiện: `OrderPlaced` → Payment xử lý → `PaymentCompleted` → Order cập nhật → barista nhận qua SignalR
-- [ ] Outbox pattern để không mất message; idempotent consumer
-- [ ] Resilience: `AddStandardResilienceHandler` (retry, circuit breaker, timeout)
-- [ ] Aspire dashboard: trace xuyên service; Redis + SQL Server + broker khai báo trong AppHost (thay `docker-compose.yml`)
-- [ ] `docs/sessions/b54.md`, `b55.md`
+- [x] `CyberCafe.AppHost` (Aspire 13.6, `Aspire.AppHost.Sdk` — không cần workload) + `CyberCafe.ServiceDefaults` (OpenTelemetry, health check `/health` `/alive`, service discovery, resilience)
+- [x] Tách service, mỗi service 1 database riêng — **có điều chỉnh**: ~~`Menu.Api`, `Order.Api`, `Payment.Api`~~ → `CyberCafe.Api` giữ vai trò **Order service** (+ Menu + Identity, không viết lại — CyberCafeDb), tách **`CyberCafe.Payment.Api`** (minimal API, database `CyberCafePayments`, migration riêng). Tách Menu là bài tập b54 (2 buổi không đủ cho 3 service + broker + outbox).
+- [x] API Gateway **YARP** (`CyberCafe.Gateway`, service discovery `http://api` / `http://payment`): route ~~`/menu/*`, `/orders/*`~~ → `/api/*`, `/hubs/*` (giữ hợp đồng HTTP + SignalR của Web), `/payments/*`; **JWT kiểm tập trung ở gateway** cho `/payments/*` (policy `AdminOnly`), `/api/*` chuyển nguyên token để Api tự kiểm policy chi tiết — so sánh trong `b54.md`
+- [x] Message broker: **RabbitMQ** qua **MassTransit 8.5.11** (Apache-2.0; 9.x là thương mại — khóa version), lý do RabbitMQ vs Kafka trong [ADR 0004](docs/adr/0004-rabbitmq-masstransit-v8.md); hợp đồng message ở project riêng `CyberCafe.IntegrationEvents` (chỉ BCL)
+- [x] Luồng sự kiện: `OrderPlacedIntegrationEvent` → Payment (luật giả lập: vượt 500.000 đ / thẻ đuôi `0000` bị từ chối) → `PaymentCompleted` → `order.Pay` → domain event `OrderPlaced` → barista + khách nhận qua SignalR; `PaymentFailed` → `order.RejectPayment` → `Cancelled`
+- [x] **Outbox** tự viết (bảng `OutboxMessages` cùng transaction với đơn, `OutboxPublisherWorker`, nối trace qua `TraceParent`) + **idempotent consumer** (`ProcessedMessages` ở cả 2 service, `UNIQUE(OrderId)` bên Payment) — migration `AddOutboxAndInbox`, [ADR 0005](docs/adr/0005-outbox-idempotent-consumer.md)
+- [x] Resilience: `AddStandardResilienceHandler` (không retry POST), `UseMessageRetry` + queue `_error`, outbox thử lại khi broker tắt
+- [x] Aspire dashboard: 1 trace xuyên gateway → api → RabbitMQ → payment → api; SQL Server + Redis + RabbitMQ khai báo trong AppHost. `docker-compose.yml` **giữ lại** cho các tag cũ / chạy Api lẻ (`Payments:Flow` mặc định `InProcess` = hành vi b53)
+- [x] Test (không cần Docker): 209 test cũ vẫn xanh (chỉ sửa `PipelineTests`: thêm 2 port giả vào DI, ngưỡng đếm request 8 → 10 vì có 2 command mới); thêm test outbox cùng transaction, dispatcher, idempotent consumer (MassTransit test harness), luật thanh toán, định tuyến gateway, ranh giới service (`ServiceBoundaryTests`)
+- [x] `docs/sessions/b54.md`, `b55.md` (kèm tổng kết cả dự án); `docs/architecture.md` có sơ đồ topology
+
+Kịch bản: [b54](docs/sessions/b54.md) · [b55](docs/sessions/b55.md)

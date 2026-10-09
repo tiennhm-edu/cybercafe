@@ -1,10 +1,15 @@
 // ============================================================================
-// PlaceOrder.cs — use case ĐẶT HÀNG theo CQRS (Buổi 51 · command; Buổi 52 · validator; Buổi 49–50 · aggregate).
+// PlaceOrder.cs — use case ĐẶT HÀNG theo CQRS (Buổi 51 · command; Buổi 52 · validator; Buổi 49–50 · aggregate;
+//                Buổi 55 · outbox — thanh toán bất đồng bộ qua Payment service).
 // 1 file = 1 use case trọn vẹn ("vertical slice"): command (dữ liệu vào) + validator + handler.
 // So với b48 OrderService.PlaceAsync:
 //   - Không còn Cart.ToOrder + Checkout: dựng thẳng aggregate Order.Create → AddItem → ApplyDiscount → Pay.
 //   - Không gọi notifier: Pay() phát OrderPlaced; handler NotifyBaristasOnOrderPlaced lo báo quầy SAU khi lưu.
 //   - Validate hình dạng dữ liệu ở PlaceOrderCommandValidator (chạy trong ValidationBehavior, trước handler).
+// Buổi 55: 2 nhánh theo OrderingSettings.PaymentFlow:
+//   InProcess  — giữ nguyên b53 (Pay ngay, 1 lần SaveChanges).
+//   Messaging  — KHÔNG Pay. Lưu đơn (lần 1, để có Id) → ghi OrderPlacedIntegrationEvent vào outbox → lưu (lần 2).
+//                Cả 2 lần nằm trong 1 transaction của TransactionBehavior (b52) → đơn và message cùng commit.
 // ============================================================================
 using CyberCafe.Application.Common.Exceptions;
 using CyberCafe.Application.Common.Interfaces;
@@ -17,6 +22,7 @@ using CyberCafe.Domain.Orders;
 using CyberCafe.Domain.Payments;
 using CyberCafe.Domain.People;
 using CyberCafe.Domain.Products;
+using CyberCafe.IntegrationEvents;
 using FluentValidation;
 using ValidationException = CyberCafe.Application.Common.Exceptions.ValidationException;
 
@@ -80,10 +86,16 @@ public sealed class PlaceOrderCommandValidator : AbstractValidator<PlaceOrderCom
 }
 
 /// <summary>Tra món + mã giảm giá, dựng aggregate, lưu. Domain event lo phần báo realtime.</summary>
+/// <remarks>
+/// Buổi 55: <paramref name="settings"/> và <paramref name="outbox"/> là tham số TÙY CHỌN — DI luôn truyền (đã đăng ký),
+/// còn unit test b53 tạo handler bằng 3 tham số vẫn chạy y như cũ (mặc định InProcess).
+/// </remarks>
 public sealed class PlaceOrderCommandHandler(
     IProductRepository products,
     IOrderRepository orders,
-    IUnitOfWork unitOfWork) : ICommandHandler<PlaceOrderCommand, OrderDto>
+    IUnitOfWork unitOfWork,
+    OrderingSettings? settings = null,
+    IIntegrationEventOutbox? outbox = null) : ICommandHandler<PlaceOrderCommand, OrderDto>
 {
     /// <inheritdoc />
     public async Task<OrderDto> Handle(PlaceOrderCommand command, CancellationToken ct)
@@ -121,6 +133,11 @@ public sealed class PlaceOrderCommandHandler(
             order.ApplyDiscount(discount);
         }
 
+        if ((settings ?? OrderingSettings.Default).PaymentFlow == PaymentFlow.Messaging)
+        {
+            return await this.PlaceAndRequestPaymentAsync(order, command, ct);
+        }
+
         // Pay: chốt số tiền, Process() đa hình, cộng điểm, Raise(OrderPaid + OrderPlaced)
         order.Pay(PaymentFactory.Create(command.PaymentMethod, order.FinalAmount.Amount, phone.Value, command.CardNumber));
 
@@ -128,6 +145,32 @@ public sealed class PlaceOrderCommandHandler(
         //    → NotifyBaristasOnOrderPlaced gửi SignalR. Handler này không biết gì về SignalR.
         orders.Add(order);
         await unitOfWork.SaveChangesAsync(ct);
+        return order.ToDto();
+    }
+
+    // 👉 Bước 2 (b55.md): nhánh microservice — lưu đơn + message trong CÙNG 1 transaction (Outbox pattern)
+    private async Task<OrderDto> PlaceAndRequestPaymentAsync(Order order, PlaceOrderCommand command, CancellationToken ct)
+    {
+        if (outbox is null)
+        {
+            throw new InvalidOperationException("PaymentFlow = Messaging nhưng chưa đăng ký IIntegrationEventOutbox (AddInfrastructure).");
+        }
+
+        // Lần lưu 1: INSERT Orders + OrderItems → SQL Server sinh Id (IDENTITY). Message cần OrderId nên phải lưu trước.
+        orders.Add(order);
+        await unitOfWork.SaveChangesAsync(ct);
+
+        // Lần lưu 2: 1 dòng OutboxMessages. Nếu dòng này lỗi → TransactionBehavior rollback CẢ đơn ở lần lưu 1.
+        // ⚠️ Lỗi hay gặp: gọi thẳng bus.Publish(...) ở đây → message đi trước khi commit; commit lỗi = Payment thu tiền đơn không tồn tại.
+        // ⚠️ Lỗi hay gặp: gửi command.CardNumber (đủ 16 số) vào event — chỉ gửi 4 số cuối.
+        string? cardLast4 = command.PaymentMethod == PaymentMethod.Card ? command.CardNumber?[^4..] : null;
+        outbox.Enqueue(new OrderPlacedIntegrationEvent(
+            Guid.NewGuid(), DateTime.UtcNow, order.Id, order.Code.Value, order.FinalAmount.Amount,
+            command.PaymentMethod.ToString(), cardLast4));
+        await unitOfWork.SaveChangesAsync(ct);
+
+        // Trả 201 ngay với đơn Pending, chưa thanh toán (PaymentMethod = null). Khách thấy "Đang xử lý thanh toán";
+        // khi Payment trả lời, ConfirmOrderPaymentCommand gọi order.Pay → OrderPlaced → barista + khách nhận SignalR.
         return order.ToDto();
     }
 }

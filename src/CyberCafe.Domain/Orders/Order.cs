@@ -14,6 +14,9 @@
 //   4) Trạng thái chỉ đi theo OrderStatusFlow; khách chỉ tự hủy khi Pending.
 //   5) Không thêm món đang tạm hết.
 // So với b48: không còn public constructor nhận sẵn danh sách món, không còn Checkout() ai gọi mấy lần cũng được.
+// Buổi 55 (microservice): thanh toán có thể đến SAU, bất đồng bộ từ Payment service:
+//   Order.Create → AddItem → (lưu, chờ)  …  PaymentCompleted → Pay(payment)  |  PaymentFailed → RejectPayment(lý do)
+//   Trong lúc chờ: Pending + chưa trả tiền = IsAwaitingPayment. Invariant 3 ("chưa trả chưa pha") giữ nguyên.
 // ============================================================================
 using CyberCafe.Domain.Common;
 using CyberCafe.Domain.Discounts;
@@ -68,6 +71,12 @@ public class Order : AggregateRoot
 
     /// <summary>Đã thanh toán xong chưa.</summary>
     public bool IsPaid => this.Payment is { IsPaid: true };
+
+    /// <summary>
+    /// Buổi 55: đơn đã đặt nhưng Payment service chưa trả lời (Pending, chưa trả tiền).
+    /// Màn hình quầy KHÔNG hiện các đơn này; trang của khách hiện "Đang xử lý thanh toán".
+    /// </summary>
+    public bool IsAwaitingPayment => this.Status == OrderStatus.Pending && !this.IsPaid;
 
     /// <summary>Tổng tiền trước giảm giá.</summary>
     public Money TotalAmount => Money.Sum(this._items.Select(x => x.TotalPrice));
@@ -194,6 +203,23 @@ public class Order : AggregateRoot
         }
 
         this.TransitionTo(OrderStatus.Cancelled);
+    }
+
+    // 👉 Bước 4 (b55.md): Payment service từ chối → hủy đơn. Đi qua TransitionTo như mọi lần đổi trạng thái
+    // → phát OrderStatusChanged → handler cũ (b50) báo SignalR cho khách. Không cần handler mới.
+    /// <summary>Thanh toán bị từ chối (vượt hạn mức, thẻ bị từ chối...) → hủy đơn đang chờ thanh toán.</summary>
+    /// <param name="reason">Lý do từ Payment service (để log; chưa lưu cột riêng).</param>
+    /// <exception cref="DomainException">Đơn đã thanh toán rồi (không hủy vì 1 message lạc) hoặc đã đi khỏi Pending.</exception>
+    public void RejectPayment(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (this.IsPaid)
+        {
+            // ⚠️ Lỗi hay gặp: tin mọi message tới → đơn đã trả tiền bị hủy vì 1 message PaymentFailed cũ/đến trễ.
+            throw new DomainException($"Đơn {this.Code} đã thanh toán, không thể đánh dấu thanh toán thất bại");
+        }
+
+        this.TransitionTo(OrderStatus.Cancelled); // chỉ hợp lệ từ Pending/Preparing; chưa trả tiền thì chắc chắn Pending
     }
 
     // 👉 Bước 7 (b40.md) · 👉 Bước 3 (b49.md): nút barista / PUT /status gửi "trạng thái đích" →

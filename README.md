@@ -37,7 +37,7 @@ git switch main
 
 ## Cách chạy
 
-Yêu cầu: **.NET SDK 10** (repo pin `10.0.100` trong `global.json`, cho phép roll-forward lên bản 10.0.x mới hơn). Từ tag `b40-api-efcore` cần thêm **Docker Desktop** (SQL Server, từ `b47-auth-cache` thêm Redis, chạy trong container).
+Yêu cầu: **.NET SDK 10** (repo pin `10.0.100` trong `global.json`, cho phép roll-forward lên bản 10.0.x mới hơn). Từ tag `b40-api-efcore` cần thêm **Docker Desktop** (SQL Server, từ `b47-auth-cache` thêm Redis, từ `b55-microservice` thêm RabbitMQ — đều chạy trong container).
 
 ### Chỉ build + test (không cần Docker)
 
@@ -47,7 +47,32 @@ dotnet build                  # build cả solution CyberCafe.slnx
 dotnet test                   # unit test + test tích hợp Api (EF Core InMemory, không cần SQL Server/Redis)
 ```
 
-### Chạy đầy đủ (từ `b40-api-efcore`)
+### Chạy đầy đủ từ `b55-microservice`: 1 lệnh với .NET Aspire
+
+```bash
+# Docker Desktop phải đang chạy. Không cần "dotnet workload install aspire" (Aspire 13 là gói NuGet SDK).
+dotnet run --project src/CyberCafe.AppHost
+# → khởi động container SQL Server 2022, Redis, RabbitMQ + 4 project; tự tạo database + bảng (migration lúc khởi động)
+# → Aspire dashboard: http://localhost:15080 (console in link đăng nhập kèm token)
+```
+
+| Thành phần | Địa chỉ | Ghi chú |
+|------------|---------|---------|
+| Aspire dashboard | http://localhost:15080 | Resources, Console log, **Traces** (1 lần đặt hàng = 1 trace gateway → api → RabbitMQ → payment → api), Metrics |
+| Web (Blazor Server) | http://localhost:5170 | Chỉ gọi **gateway** (`ApiBaseUrl=http://gateway/`, `HubBaseUrl`) |
+| Gateway (YARP) | http://localhost:5190 | `/api/*`, `/hubs/*` → api · `/payments/*` → payment (chỉ Admin, JWT kiểm ở gateway) |
+| Api — Order service | http://localhost:5180 | Như b53 + outbox; `Payments__Flow=Messaging` (thanh toán qua Payment service) |
+| Payment service | http://localhost:5185 | Minimal API + consumer RabbitMQ, database `CyberCafePayments` |
+| SQL Server | `localhost,14330` | user `sa`, mật khẩu **giả** `Fake_Passw0rd_ChangeMe` (parameter `sql-password` trong `src/CyberCafe.AppHost/appsettings.json`) |
+| RabbitMQ / Redis | cổng động | Mở Management UI của RabbitMQ từ dashboard |
+
+Demo thanh toán (luật giả lập trong `src/CyberCafe.Payment.Api/appsettings.json`): thẻ `4111 1111 1111 1234` → thành công, quầy barista thấy đơn ngay; thẻ `…0000` hoặc đơn > 500.000 đ → "Thanh toán không thành công", đơn tự hủy. Admin → **Giao dịch thanh toán** (dữ liệu từ Payment service qua gateway).
+
+Dừng: `Ctrl+C`. Dữ liệu SQL nằm trong volume `cybercafe-b55-sql` (giữ qua các lần chạy). Xóa sạch: `docker volume rm cybercafe-b55-sql`. Nếu AppHost bị tắt đột ngột (đóng terminal), container có thể còn lại: `docker ps` rồi `docker rm -f <tên>`.
+
+> Không có Docker? Vẫn `dotnet build` + `dotnet test` được (mọi test dùng EF InMemory + bus MassTransit trong bộ nhớ). Chạy Api lẻ không có RabbitMQ thì thanh toán tự quay về chế độ `InProcess` như b53 (cách chạy bên dưới).
+
+### Chạy kiểu cũ (tag `b40-api-efcore` … `b53-ddd-cqrs`, hoặc Api lẻ ở `b55`)
 
 ```bash
 # 1. SQL Server 2022 + Redis 7 trong Docker (cổng 1434 / 6380, mật khẩu giả trong .env.example)
@@ -91,7 +116,7 @@ Gợi ý demo (từ tag `b47-auth-cache`): tab 1 đăng nhập `barista@…` →
 
 ---
 
-## Cấu trúc thư mục (tại `b53-ddd-cqrs`)
+## Cấu trúc thư mục (tại `b55-microservice`)
 
 Sơ đồ tầng + luật phụ thuộc: [docs/architecture.md](docs/architecture.md).
 
@@ -102,7 +127,7 @@ cybercafe/
 ├── Directory.Build.props        # Nullable, ImplicitUsings cho mọi project
 ├── Directory.Packages.props     # version NuGet tập trung (Central Package Management)
 ├── dotnet-tools.json            # dotnet-ef (dotnet tool restore)
-├── docker-compose.yml           # SQL Server 2022 + Redis 7 (+ .env.example)
+├── docker-compose.yml           # SQL Server 2022 + Redis 7 (+ .env.example) — cho tag b40–b53 / chạy Api lẻ
 ├── .github/workflows/ci.yml     # CI: restore → build → test
 ├── src/
 │   ├── CyberCafe.Domain/        # C# thuần, không phụ thuộc web/EF
@@ -126,6 +151,7 @@ cybercafe/
 │   │   ├── Caching/             # MenuCache (Redis / IDistributedCache)
 │   │   ├── Realtime/            # SignalROrderNotifier<THub>, IOrderClient
 │   │   ├── Reports/             # Doanh thu theo ngày (stored procedure / LINQ)
+│   │   ├── Messaging/           # (b55) OutboxMessage + dispatcher/worker, inbox, consumer PaymentCompleted/Failed (MassTransit)
 │   │   └── DependencyInjection.cs   # AddInfrastructure(configuration), AddOrderNotifier<THub>()
 │   ├── CyberCafe.Api/           # ASP.NET Core Web API — controller mỏng + composition root
 │   │   ├── Auth/                # Policies, ToCurrentUser(), Bearer cho OpenAPI
@@ -134,21 +160,28 @@ cybercafe/
 │   │   ├── Filters/             # [InvalidateMenuCache]
 │   │   ├── Middleware/          # CorrelationId, RequestLogging
 │   │   └── Realtime/            # OrderHub (SignalR)
-│   └── CyberCafe.Web/           # Blazor Web App (Interactive Server)
-│       ├── Components/Pages/    # Home, Menu, CartPage, Checkout, OrderConfirmation, Barista, Admin/MenuAdmin, Login, Register, MyOrders
-│       ├── Components/Shared/   # ProductCard, CartSummary, OrderStatusBadge
-│       ├── Models/              # CheckoutModel (form), AddToCartArgs
-│       ├── Services/            # MenuApiClient, OrderApiClient, AuthApiClient (typed HttpClient), OrderHubConnectionFactory
-│       ├── Services/Auth/       # AuthSession, JwtAuthenticationStateProvider, BearerTokenHandler (DelegatingHandler)
-│       └── State/               # CartState (scoped + event OnChange)
+│   ├── CyberCafe.Web/           # Blazor Web App (Interactive Server) — b54: chỉ gọi gateway
+│   │   ├── Components/Pages/    # Home, Menu, CartPage, Checkout, OrderConfirmation, Barista, Admin/MenuAdmin, Admin/PaymentsAdmin (b54), Login, Register, MyOrders
+│   │   ├── Components/Shared/   # ProductCard, CartSummary, OrderStatusBadge
+│   │   ├── Models/              # CheckoutModel (form), AddToCartArgs
+│   │   ├── Services/            # MenuApiClient, OrderApiClient, AuthApiClient (typed HttpClient), OrderHubConnectionFactory
+│   │   ├── Services/Auth/       # AuthSession, JwtAuthenticationStateProvider, BearerTokenHandler (DelegatingHandler)
+│   │   └── State/               # CartState (scoped + event OnChange)
+│   ├── CyberCafe.AppHost/       # (b54) .NET Aspire: SQL Server, Redis, RabbitMQ + 4 project, dashboard
+│   ├── CyberCafe.ServiceDefaults/ # (b54) OpenTelemetry, health check, service discovery, resilience
+│   ├── CyberCafe.Gateway/       # (b54) YARP: /api, /hubs → api; /payments → payment (JWT Admin)
+│   ├── CyberCafe.Payment.Api/   # (b54–55) Payment service: minimal API, DB riêng, consumer idempotent, luật thanh toán
+│   └── CyberCafe.IntegrationEvents/ # (b55) hợp đồng message giữa service (record thuần BCL)
 ├── tests/
 │   ├── CyberCafe.Tests/         # xUnit: Domain + Web (typed client với HttpMessageHandler giả)
 │   ├── CyberCafe.Application.Tests/ # (b53) handler, pipeline behavior, dispatcher — port giả, không DB
 │   ├── CyberCafe.Api.Tests/     # WebApplicationFactory + EF InMemory + SignalR qua TestServer
-│   └── CyberCafe.ArchitectureTests/ # (b48) luật phụ thuộc giữa các tầng; (b53) luật DDD/CQRS (Reflection)
-├── docs/architecture.md         # sơ đồ tầng (Mermaid), đặt code mới ở đâu
+│   ├── CyberCafe.ArchitectureTests/ # (b48) luật phụ thuộc giữa các tầng; (b53) luật DDD/CQRS; (b55) ranh giới service
+│   ├── CyberCafe.Payment.Tests/ # (b55) luật thanh toán + consumer idempotent (MassTransit test harness)
+│   └── CyberCafe.Gateway.Tests/ # (b54) route YARP, JWT ở gateway (bộ chuyển tiếp giả)
+├── docs/architecture.md         # sơ đồ tầng + topology service (Mermaid), đặt code mới ở đâu
 ├── docs/sessions/               # kịch bản live-code cho từng chặng
-├── docs/adr/                    # quyết định kiến trúc (ADR 0001 DbContext, 0002 Clean Architecture, 0003 DDD + CQRS)
+├── docs/adr/                    # ADR 0001 DbContext, 0002 Clean Architecture, 0003 DDD + CQRS, 0004 RabbitMQ + MassTransit 8, 0005 Outbox + idempotent
 ├── ROADMAP.md                   # kế hoạch các tag tiếp theo
 └── README.md
 ```
@@ -165,7 +198,7 @@ cybercafe/
 | `b47-auth-cache` | 42–47 | JWT + BCrypt + refresh token, phân quyền, middleware, filter, Redis cache, rate limiting | ✅ |
 | `b48-clean-arch` | 48 | Clean Architecture: Domain / Application / Infrastructure / Api, port + adapter, architecture test | ✅ |
 | `b53-ddd-cqrs` | 49–53 | Order aggregate, value object, domain event, CQRS (dispatcher tự viết), pipeline behavior, read model | ✅ |
-| `b55-microservice` | 54–55 | .NET Aspire, YARP gateway, Order/Payment/Menu services, message broker | ⏳ |
+| `b55-microservice` | 54–55 | .NET Aspire AppHost, YARP gateway, Payment service (DB riêng), RabbitMQ (MassTransit 8), Outbox, idempotent consumer, trace xuyên service | ✅ |
 
 Chi tiết từng mốc: [ROADMAP.md](ROADMAP.md). Kịch bản giảng: [docs/sessions/](docs/sessions/).
 

@@ -1,0 +1,36 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.6.1">
+
+  <!--
+    CyberCafe.AppHost (Buổi 54 · .NET Aspire): "nhạc trưởng" của cả hệ thống khi chạy trên máy dev.
+      dotnet run (project src/CyberCafe.AppHost — lệnh đầy đủ trong README)
+    → khởi động container SQL Server, Redis, RabbitMQ + 4 project (api, payment, gateway, web),
+      nối connection string / địa chỉ service qua biến môi trường, mở Aspire dashboard (log, trace, metric).
+    Aspire 9+ / 13: AppHost là gói NuGet "Aspire.AppHost.Sdk" (dòng Sdk ở trên) — KHÔNG cần "dotnet workload install aspire".
+    CI (ubuntu-latest + setup-dotnet) build được như project thường; CHẠY thì cần Docker (container).
+    Version các gói Aspire.Hosting.* nằm trong Directory.Packages.props (MIT).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- Nơi lưu parameter bí mật thật (dotnet user-secrets set "Parameters:jwt-key" "...") thay cho giá trị giả trong appsettings -->
+    <UserSecretsId>cybercafe-apphost</UserSecretsId>
+    <!-- ASPIRE010: Aspire 13.6 nhắc có thể dùng "Aspire CLI bundle". Ta dùng cách mặc định (dashboard + DCP tải qua NuGet
+         khi restore) → không cần cài thêm CLI nào; tắt cảnh báo để build giữ 0 warning. -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);ASPIRE010</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.SqlServer" />
+    <PackageReference Include="Aspire.Hosting.Redis" />
+    <PackageReference Include="Aspire.Hosting.RabbitMQ" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tham chiếu project = khai báo "service" cho AppHost (sinh lớp Projects.CyberCafe_Api...), KHÔNG phải dùng code của nó -->
+    <ProjectReference Include="..\CyberCafe.Api\CyberCafe.Api.csproj" />
+    <ProjectReference Include="..\CyberCafe.Payment.Api\CyberCafe.Payment.Api.csproj" />
+    <ProjectReference Include="..\CyberCafe.Gateway\CyberCafe.Gateway.csproj" />
+    <ProjectReference Include="..\CyberCafe.Web\CyberCafe.Web.csproj" />
+  </ItemGroup>
+
+</Project>

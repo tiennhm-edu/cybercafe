@@ -1,8 +1,9 @@
-# Kiến trúc CyberCafe (từ tag `b48-clean-arch`, cập nhật `b53-ddd-cqrs`)
+# Kiến trúc CyberCafe (từ tag `b48-clean-arch`, cập nhật `b53-ddd-cqrs`, `b55-microservice`)
 
 CyberCafe theo **Clean Architecture**: nghiệp vụ ở giữa, hạ tầng ở ngoài, mũi tên phụ thuộc **chỉ hướng vào trong**.
 Từ `b53`, luồng đơn hàng theo **DDD** (aggregate `Order`, value object, domain event) + **CQRS** (command/query qua dispatcher tự viết).
-Quyết định chi tiết: [ADR 0002](adr/0002-clean-architecture-port-hep.md), [ADR 0003](adr/0003-cqrs-dispatcher-tu-viet.md). Kịch bản giảng: [b48](sessions/b48.md), [b49](sessions/b49.md) … [b53](sessions/b53.md).
+Từ `b55`, hệ thống chạy thành **nhiều service** điều phối bằng **.NET Aspire** — xem [phần Microservice](#từ-b55-microservice--aspire-gateway-rabbitmq) ở cuối trang; mọi thứ bên trong Order service (Api) vẫn đúng như các sơ đồ dưới đây.
+Quyết định chi tiết: [ADR 0002](adr/0002-clean-architecture-port-hep.md), [ADR 0003](adr/0003-cqrs-dispatcher-tu-viet.md), [ADR 0004](adr/0004-rabbitmq-masstransit-v8.md), [ADR 0005](adr/0005-outbox-idempotent-consumer.md). Kịch bản giảng: [b48](sessions/b48.md), [b49](sessions/b49.md) … [b53](sessions/b53.md), [b54](sessions/b54.md), [b55](sessions/b55.md).
 
 ## Sơ đồ tầng
 
@@ -129,3 +130,110 @@ dotnet ef migrations add <Ten> -p src/CyberCafe.Infrastructure -s src/CyberCafe.
 ```
 
 Id các migration cũ giữ nguyên khi chuyển project → database tạo từ `b40`/`b47` dùng tiếp, không cần migration mới.
+
+---
+
+## Từ `b55`: microservice — Aspire, gateway, RabbitMQ
+
+`CyberCafe.Api` không bị viết lại: nó trở thành **Order service** (kèm Menu + Identity — tách tiếp là bài tập). Thanh toán tách ra **Payment service**. Mọi thứ chạy bằng 1 lệnh `dotnet run --project src/CyberCafe.AppHost`.
+
+### Sơ đồ topology
+
+```mermaid
+flowchart LR
+    Browser(["Trình duyệt"]) -->|"Blazor circuit"| Web["web<br/>CyberCafe.Web"]
+    Web -->|"HTTP + JWT<br/>ApiBaseUrl = http://gateway"| GW["gateway<br/>CyberCafe.Gateway (YARP)<br/>kiểm JWT cho /payments/*"]
+    Web -.->|"SignalR (HubBaseUrl)"| GW
+    GW -->|"/api/*, /hubs/*"| Api["api — Order service<br/>CyberCafe.Api (+ Application,<br/>Infrastructure, Domain, Contracts)"]
+    GW -->|"/payments/* (Admin)"| Pay["payment<br/>CyberCafe.Payment.Api"]
+    Api --> SqlA[("SQL Server<br/>CyberCafeDb<br/>Orders … OutboxMessages,<br/>ProcessedMessages")]
+    Api --> Redis[("Redis<br/>cache thực đơn")]
+    Pay --> SqlP[("SQL Server<br/>CyberCafePayments<br/>Payments, ProcessedMessages")]
+    Api <-->|"OrderPlaced → / ← PaymentCompleted, PaymentFailed"| MQ{{"RabbitMQ<br/>messaging"}}
+    Pay <--> MQ
+    subgraph Aspire["CyberCafe.AppHost (.NET Aspire) — dashboard: log, trace, metric"]
+        Web
+        GW
+        Api
+        Pay
+        SqlA
+        SqlP
+        Redis
+        MQ
+    end
+```
+
+| Project | Vai trò | Tham chiếu được | **Không** tham chiếu |
+|---------|---------|-----------------|----------------------|
+| `CyberCafe.AppHost` | Khai báo container (SQL, Redis, RabbitMQ) + 4 project, nối cấu hình, dashboard | các project service (chỉ để chạy) | — |
+| `CyberCafe.ServiceDefaults` | `AddServiceDefaults()`: OpenTelemetry, health `/health` `/alive`, service discovery, `AddStandardResilienceHandler` | gói Microsoft/OpenTelemetry | Mọi project `CyberCafe.*` |
+| `CyberCafe.IntegrationEvents` | Hợp đồng message giữa service (record, kiểu nguyên thủy) | chỉ BCL | Domain, Contracts, MassTransit |
+| `CyberCafe.Gateway` | YARP: route `/api`, `/hubs` → api; `/payments` → payment (JWT Admin) | ServiceDefaults | Code của mọi service |
+| `CyberCafe.Payment.Api` | Minimal API + consumer `OrderPlaced`, luật thanh toán, DB riêng | IntegrationEvents, ServiceDefaults | Domain, Contracts, Application, Infrastructure, Api |
+| `CyberCafe.Api` (+ 4 tầng) | Order/Menu/Identity như b53 + outbox, inbox, consumer kết quả thanh toán | như b53 + IntegrationEvents, ServiceDefaults | Payment.Api |
+
+Luật trên được kiểm tra bởi `tests/CyberCafe.ArchitectureTests/ServiceBoundaryTests.cs`.
+
+### Luồng đặt hàng + thanh toán (trace xuyên service)
+
+```mermaid
+sequenceDiagram
+    participant W as Web
+    participant G as Gateway (YARP)
+    participant A as Api (Order)
+    participant DB as CyberCafeDb
+    participant O as OutboxPublisherWorker
+    participant MQ as RabbitMQ
+    participant P as Payment.Api
+    participant PDB as CyberCafePayments
+    W->>G: POST /api/orders (Bearer)
+    G->>A: chuyển tiếp (+ X-Forwarded-For)
+    A->>DB: BEGIN · INSERT Orders (Pending, chưa trả) · INSERT OutboxMessages · COMMIT
+    A-->>W: 201 — "Đang xử lý thanh toán"
+    O->>DB: SELECT dòng chưa gửi
+    O->>MQ: publish OrderPlacedIntegrationEvent (span con của POST)
+    O->>DB: ProcessedAtUtc = now
+    MQ->>P: payment-order-placed
+    P->>PDB: đã xử lý? → luật → INSERT Payments + ProcessedMessages
+    P->>MQ: PaymentCompleted / PaymentFailed (EventId đã lưu)
+    MQ->>A: ordering-payment-completed / -failed
+    A->>DB: inbox? → order.Pay(...) hoặc RejectPayment(...) + ProcessedMessages · COMMIT
+    A-->>W: SignalR OrderPlaced (barista + khách) / OrderStatusChanged = Cancelled (khách)
+```
+
+Trên Aspire dashboard (tab **Traces**), 1 lần đặt hàng là **1 trace** gồm span của `gateway`, `api` (HTTP, `outbox publish …`, MassTransit `send`/`receive`), `payment` (MassTransit `receive`/`process`/`send`) và quay lại `api`.
+
+### Domain event vs integration event
+
+| | Domain event (b50) | Integration event (b55) |
+|-|--------------------|-------------------------|
+| Ví dụ | `OrderPaid`, `OrderPlaced`, `OrderStatusChanged` | `OrderPlacedIntegrationEvent`, `PaymentCompletedIntegrationEvent`, `PaymentFailedIntegrationEvent` |
+| Phạm vi | Trong Order service, cùng tiến trình | Giữa các service, qua RabbitMQ |
+| Nội dung | Tham chiếu aggregate `Order` | Kiểu nguyên thủy, JSON, có `EventId` |
+| Phát khi | Sau commit (`CyberCafeDbContext`), best-effort | Ghi Outbox CÙNG transaction → worker gửi (at-least-once) |
+| Bên nhận | `IDomainEventHandler<T>` (SignalR, log) | Consumer MassTransit → command (idempotent qua `ProcessedMessages`) |
+| Đổi được không | Thoải mái (nội bộ) | Hợp đồng công khai: chỉ thêm field, không đổi/xóa |
+
+### `PaymentFlow`: 2 chế độ thanh toán
+
+| `Payments:Flow` | Ai dùng | `POST /api/orders` |
+|-----------------|---------|--------------------|
+| `InProcess` (mặc định) | Chạy Api lẻ kiểu b40–b53, toàn bộ test cũ | `order.Pay(...)` ngay, như b53 |
+| `Messaging` | AppHost (`Payments__Flow=Messaging`), `PaymentMessagingTests` | Lưu đơn chờ + outbox; kết quả đến sau qua RabbitMQ |
+
+### Đặt code mới ở đâu? (bổ sung b55)
+
+| Bạn cần… | Đặt ở | Ví dụ |
+|----------|-------|-------|
+| Báo cho service KHÁC biết điều gì đã xảy ra | Record trong `CyberCafe.IntegrationEvents` + `IIntegrationEventOutbox.Enqueue` trong command handler | `OrderPlacedIntegrationEvent` |
+| Nhận message từ service khác | Consumer mỏng ở Infrastructure/Messaging → command ở Application (kiểm `IInbox`) | `PaymentCompletedConsumer` → `ConfirmOrderPaymentCommand` |
+| Route mới cho client | `ReverseProxy` trong `src/CyberCafe.Gateway/appsettings.json` | `/payments/{**catch-all}` |
+| Container / service mới | `src/CyberCafe.AppHost/AppHost.cs` (`AddXxx` + `WithReference` + `WaitFor`) | `AddRabbitMQ("messaging")` |
+| Log/trace/health/resilience dùng chung | `src/CyberCafe.ServiceDefaults/Extensions.cs` | `AddSource("CyberCafe.*")` |
+
+Lệnh EF cho Payment service (project = startup = chính nó):
+
+```bash
+dotnet ef migrations add <Ten> -p src/CyberCafe.Payment.Api -s src/CyberCafe.Payment.Api -o Data/Migrations
+```
+

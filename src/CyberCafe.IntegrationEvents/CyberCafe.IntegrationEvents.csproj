@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    CyberCafe.IntegrationEvents (Buổi 54–55): "hợp đồng" message giữa các SERVICE (Order ↔ Payment) qua RabbitMQ.
+    Đây là project DUY NHẤT mà các service dùng chung (ngoài ServiceDefaults là hạ tầng chung).
+    Luật (architecture test kiểm tra):
+      - Chỉ dùng BCL (System.*): KHÔNG tham chiếu Domain, Contracts, MassTransit, EF Core...
+      - Chỉ chứa record bất biến với kiểu nguyên thủy (int, decimal, string, Guid, DateTime).
+    Vì sao không dùng lại enum PaymentMethod của Domain? Domain là chuyện NỘI BỘ của Order service.
+    Payment service tham chiếu Domain của Order = 2 service dính nhau như 1 khối → đổi 1 enum phải deploy cả 2.
+    ⚠️ Lỗi hay gặp: "cho tiện" để Payment.Api tham chiếu CyberCafe.Domain → "distributed monolith".
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+</Project>

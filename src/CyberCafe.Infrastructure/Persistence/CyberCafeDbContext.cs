@@ -1,5 +1,5 @@
 // ============================================================================
-// CyberCafeDbContext.cs — "cửa ngõ" EF Core tới database CyberCafeDb (Buổi 36–41 · 48 · 50 · 52 · Code First).
+// CyberCafeDbContext.cs — "cửa ngõ" EF Core tới database CyberCafeDb (Buổi 36–41 · 48 · 50 · 52 · 55 · Code First).
 // Code First: viết class C# trước (chính là class domain Product/Order...) → EF sinh bảng
 // bằng migration. Không có class "entity" riêng: EF lưu thẳng domain nhờ Fluent API
 // (thư mục Configurations/) — domain không phải gắn [Key], [Table]... nên vẫn là C# thuần.
@@ -7,6 +7,8 @@
 // Buổi 50: PHÁT DOMAIN EVENT sau khi SaveChanges thành công (override SaveChangesAsync).
 // Buổi 52: ExecuteInTransactionAsync cho TransactionBehavior — event chờ tới khi COMMIT mới phát.
 //   Thứ tự an toàn: lưu → commit → báo. Ngược lại (báo trước, lưu sau) là báo "đơn ma" khi lưu lỗi.
+// Buổi 55: thêm OutboxMessages + ProcessedMessages (migration AddOutboxAndInbox). Domain event vẫn phát sau commit
+//   như cũ (SignalR, trong 1 service); việc CHẮC CHẮN tới service khác thì đi qua outbox (Messaging/).
 // ============================================================================
 using CyberCafe.Application.Common.Interfaces;
 using CyberCafe.Application.Common.Messaging;
@@ -14,6 +16,7 @@ using CyberCafe.Domain.Common;
 using CyberCafe.Domain.Orders;
 using CyberCafe.Domain.Products;
 using CyberCafe.Infrastructure.Identity;
+using CyberCafe.Infrastructure.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -50,6 +53,14 @@ public class CyberCafeDbContext(DbContextOptions<CyberCafeDbContext> options, ID
 
     /// <summary>Refresh token đã phát (chỉ lưu hash).</summary>
     public DbSet<RefreshToken> RefreshTokens => this.Set<RefreshToken>();
+
+    // 👉 Bước 2 (b55.md): CÙNG database với Orders → cùng transaction (Outbox pattern)
+
+    /// <summary>Integration event chờ gửi lên RabbitMQ (Outbox).</summary>
+    public DbSet<OutboxMessage> OutboxMessages => this.Set<OutboxMessage>();
+
+    /// <summary>Message đã xử lý (idempotent consumer).</summary>
+    public DbSet<ProcessedMessage> ProcessedMessages => this.Set<ProcessedMessage>();
 
     // 👉 Bước 6 (b50.md)
     /// <summary>

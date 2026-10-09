@@ -1,6 +1,7 @@
 @* ==========================================================================
    NavMenu.razor — thanh điều hướng bên trái (Buổi 23 · Routing + NavLink; Buổi 24–31 thêm Giỏ hàng;
-   Buổi 32–41 thêm Quầy barista + Quản lý thực đơn — Buổi 42–47 ẩn/hiện theo vai trò bằng <AuthorizeView>).
+   Buổi 32–41 thêm Quầy barista + Quản lý thực đơn — Buổi 42–47 ẩn/hiện theo vai trò bằng <AuthorizeView>;
+   Buổi 54 thêm Giao dịch thanh toán — dữ liệu từ Payment service qua gateway).
    ⚠️ Ẩn link KHÔNG phải là bảo mật: người dùng vẫn gõ được URL → trang phải có [Authorize]
       và Api phải kiểm tra quyền. Ẩn link chỉ để giao diện gọn đúng vai trò.
    Mỗi mục là 1 <NavLink> trỏ tới 1 route khai báo bằng @page trong Pages/.
@@ -63,6 +64,12 @@
                 @* /admin/menu → Admin/MenuAdmin.razor: CRUD thực đơn qua API *@
                 <NavLink class="nav-link" href="admin/menu">
                     <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Quản lý thực đơn
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                @* /admin/payments → Admin/PaymentsAdmin.razor: Payment service (b54), gateway chỉ cho Admin *@
+                <NavLink class="nav-link" href="admin/payments">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Giao dịch thanh toán
                 </NavLink>
             </div>
         </AuthorizeView>

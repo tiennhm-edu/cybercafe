@@ -4,6 +4,9 @@
     Buổi 32–35 · đọc đơn từ API; Buổi 33–34 · trạng thái tự cập nhật qua SignalR).
    Khách để trang này mở: barista bấm "Bắt đầu pha" → badge đổi ngay, không cần F5.
    Buổi 42–47: phải đăng nhập; Api/hub chỉ cho xem đơn CỦA MÌNH (đơn người khác → "Không tìm thấy").
+   Buổi 55: thanh toán BẤT ĐỒNG BỘ (Payment service qua RabbitMQ) → trang có 3 trạng thái:
+     ⏳ đang xử lý thanh toán (Pending, chưa có PaymentText) → 🎉 thành công (nhận "OrderPlaced" qua SignalR)
+                                                           → ❌ bị từ chối (nhận "OrderStatusChanged" = Cancelled).
    ========================================================================== *@
 @* {OrderId:int}: route parameter có RÀNG BUỘC kiểu — /orders/abc không khớp route → trang NotFound.
    ⚠️ Lỗi hay gặp: đặt tên property khác tên trong {…} (vd Id) → giá trị không được gán. *@
@@ -37,10 +40,28 @@ else if (_order is null)
 }
 else
 {
-    <div class="alert alert-success">
-        <h1 class="h4 alert-heading mb-1">🎉 Đặt hàng thành công!</h1>
-        Mã đơn <strong>@_order.Code</strong> — vui lòng đọc mã này khi nhận món tại quầy.
-    </div>
+    @* 👉 Bước 8 (b55.md): PaymentText null = Payment service chưa trả lời (hoặc đã từ chối) *@
+    @if (_order.PaymentText is null && _order.Status == OrderStatus.Pending)
+    {
+        <div class="alert alert-info">
+            <h1 class="h4 alert-heading mb-1"><span class="spinner-border spinner-border-sm"></span> Đang xử lý thanh toán...</h1>
+            Đơn <strong>@_order.Code</strong> đã được ghi nhận. Trang tự cập nhật khi có kết quả — không cần tải lại.
+        </div>
+    }
+    else if (_order.PaymentText is null && _order.Status == OrderStatus.Cancelled)
+    {
+        <div class="alert alert-danger">
+            <h1 class="h4 alert-heading mb-1">❌ Thanh toán không thành công</h1>
+            Đơn <strong>@_order.Code</strong> đã bị hủy, bạn chưa bị trừ tiền. Vui lòng thử hình thức thanh toán khác.
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-success">
+            <h1 class="h4 alert-heading mb-1">🎉 Đặt hàng thành công!</h1>
+            Mã đơn <strong>@_order.Code</strong> — vui lòng đọc mã này khi nhận món tại quầy.
+        </div>
+    }
 
     <dl class="row">
         <dt class="col-sm-3">Khách hàng</dt>
@@ -144,14 +165,9 @@ else
         _hub = HubFactory.Create(() => Session.GetAccessTokenAsync()); // hub đòi JWT (Buổi 42–47)
 
         // Sự kiện đến trên luồng của SignalR, KHÔNG phải luồng của Blazor → bọc InvokeAsync rồi mới StateHasChanged
-        _hub.On<OrderDto>(OrderHubContract.OrderStatusChanged, updated => InvokeAsync(() =>
-        {
-            if (updated.Id == OrderId)
-            {
-                _order = updated;
-                StateHasChanged();
-            }
-        }));
+        _hub.On<OrderDto>(OrderHubContract.OrderStatusChanged, updated => InvokeAsync(() => ApplyUpdate(updated)));
+        // Buổi 55: thanh toán xong (đến SAU từ Payment service) → Api gửi "OrderPlaced" cho cả group order-{id}
+        _hub.On<OrderDto>(OrderHubContract.OrderPlaced, updated => InvokeAsync(() => ApplyUpdate(updated)));
 
         // Reconnect = ConnectionId MỚI = mất group cũ → xin vào group order-{id} lại
         _hub.Reconnected += _ => WatchCurrentOrderAsync();
@@ -166,6 +182,16 @@ else
         {
             // Bắt mọi lỗi (API tắt, WebSocket bị chặn...): hub lỗi không làm hỏng trang: khách vẫn xem được đơn, chỉ mất phần "tự cập nhật"
             Logger.LogWarning(ex, "Không kết nối được OrderHub");
+        }
+    }
+
+    // Nhận bản đơn mới từ hub (chỉ khi đúng đơn đang xem)
+    private void ApplyUpdate(OrderDto updated)
+    {
+        if (updated.Id == OrderId)
+        {
+            _order = updated;
+            StateHasChanged();
         }
     }
 

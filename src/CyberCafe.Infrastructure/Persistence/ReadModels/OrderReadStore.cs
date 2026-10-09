@@ -1,5 +1,5 @@
 // ============================================================================
-// OrderReadStore.cs — READ MODEL đơn hàng: projection + AsNoTracking (Buổi 53 · CQRS read side).
+// OrderReadStore.cs — READ MODEL đơn hàng: projection + AsNoTracking (Buổi 53 · CQRS read side; Buổi 55 · chỉ đơn đã trả tiền lên quầy).
 // Phía GHI (OrderRepository) tải nguyên aggregate: Order + OrderItems + Products ĐẦY ĐỦ cột + Discount + Payment,
 // EF theo dõi từng object để biết cái gì đổi. Màn hình quầy barista KHÔNG sửa gì → làm vậy là lãng phí.
 // Ở đây: SELECT đúng các cột màn hình cần (tên/emoji món, không cần Description, Price, BeanType...),
@@ -63,8 +63,12 @@ public class OrderReadStore(CyberCafeDbContext db) : IOrderReadStore
 
     // 👉 Bước 2 (b53.md): bảng quầy barista — WHERE Status IN (...) ORDER BY CreatedAt DESC OFFSET/FETCH, dùng index IX_Orders_Status
     /// <inheritdoc />
+    // 👉 Bước 4 (b55.md): thanh toán bất đồng bộ → có đơn Pending CHƯA trả tiền (đang chờ Payment service).
+    //   Quầy chỉ thấy đơn đã trả tiền (JOIN Payments, IsPaid = 1). Luồng b53 (trả ngay) không đổi gì: mọi đơn đều đã trả.
     public Task<PagedResult<OrderDto>> GetByStatusAsync(IReadOnlyCollection<OrderStatus> statuses, int page, int pageSize, CancellationToken ct = default) =>
-        PageAsync(db.Orders.AsNoTracking().Where(o => statuses.Contains(o.Status)), page, pageSize, ct);
+        PageAsync(
+            db.Orders.AsNoTracking().Where(o => statuses.Contains(o.Status) && o.Payment != null && o.Payment.IsPaid),
+            page, pageSize, ct);
 
     private static async Task<PagedResult<OrderDto>> PageAsync(IQueryable<Order> query, int page, int pageSize, CancellationToken ct)
     {

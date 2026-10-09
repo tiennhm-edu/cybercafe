@@ -5,6 +5,9 @@
     Buổi 42–47: JWT + BCrypt, Redis cache, rate limiting (có sẵn trong ASP.NET Core, không cần package).
     Buổi 48 (Clean Architecture): Api chỉ còn là "cửa vào" — controller mỏng, hub, middleware, filter
     + COMPOSITION ROOT (Program.cs gọi AddApplication / AddInfrastructure). Không còn DbContext, Migrations ở đây.
+    Buổi 54–55 (microservice): Api trở thành "Order service" (+ Menu + Identity) — 1 trong các service do Aspire AppHost
+    điều phối; tham chiếu ServiceDefaults (OpenTelemetry, health check, service discovery, resilience).
+    Payment đã tách ra CyberCafe.Payment.Api; 2 bên nói chuyện qua RabbitMQ (Infrastructure/Messaging).
     Version package nằm trong Directory.Packages.props (Central Package Management).
   -->
   <PropertyGroup>
@@ -35,6 +38,8 @@
     <!-- Tham chiếu Infrastructure CHỈ để Program.cs gọi AddInfrastructure() (composition root).
          Controller không được dùng thẳng class nào của Infrastructure — architecture test kiểm tra. -->
     <ProjectReference Include="..\CyberCafe.Infrastructure\CyberCafe.Infrastructure.csproj" />
+    <!-- Buổi 54: cấu hình chung của mọi service (builder.AddServiceDefaults()) -->
+    <ProjectReference Include="..\CyberCafe.ServiceDefaults\CyberCafe.ServiceDefaults.csproj" />
   </ItemGroup>
 
 </Project>

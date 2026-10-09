@@ -1,5 +1,6 @@
 // ============================================================================
-// DependencyInjection.cs — đăng ký mọi "adapter" hạ tầng (Buổi 48 · composition root; Buổi 53 · read model).
+// DependencyInjection.cs — đăng ký mọi "adapter" hạ tầng (Buổi 48 · composition root; Buổi 53 · read model;
+//                          Buổi 55 · outbox, inbox, MassTransit + RabbitMQ).
 // Những dòng này trước nằm rải trong Program.cs (b47): AddDbContext, JwtOptions, BCrypt, Redis...
 // Gom về đây → Program.cs chỉ gọi builder.Services.AddInfrastructure(builder.Configuration).
 // Mỗi dòng "AddScoped<IPort, Adapter>()" chính là chỗ NỐI interface của Application với cài đặt cụ thể.
@@ -14,11 +15,13 @@ using CyberCafe.Application.Products;
 using CyberCafe.Application.Reports;
 using CyberCafe.Infrastructure.Caching;
 using CyberCafe.Infrastructure.Identity;
+using CyberCafe.Infrastructure.Messaging;
 using CyberCafe.Infrastructure.Persistence;
 using CyberCafe.Infrastructure.Persistence.ReadModels;
 using CyberCafe.Infrastructure.Persistence.Repositories;
 using CyberCafe.Infrastructure.Realtime;
 using CyberCafe.Infrastructure.Reports;
+using MassTransit;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -81,7 +84,73 @@ public static class DependencyInjection
         }
 
         services.AddSingleton<IMenuCache, MenuCache>();
+
+        // ----- Buổi 55: Outbox / Inbox / message broker -----
+        services.AddOrderMessaging(configuration);
         return services;
+    }
+
+    // 👉 Bước 3 (b55.md)
+    /// <summary>
+    /// Outbox + inbox (luôn đăng ký — chỉ là 2 bảng trong DbContext) và, khi Payments:Flow = Messaging,
+    /// dispatcher chạy nền + MassTransit (RabbitMQ nếu có ConnectionStrings:messaging, không thì in-memory cho test).
+    /// </summary>
+    public static IServiceCollection AddOrderMessaging(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddScoped<IIntegrationEventOutbox, EfIntegrationEventOutbox>();
+        services.AddScoped<IInbox, EfInbox>();
+
+        // AppHost đặt Payments__Flow=Messaging; thiếu cấu hình = InProcess (thanh toán ngay như b53)
+        PaymentFlow flow = configuration.GetValue("Payments:Flow", PaymentFlow.InProcess);
+        services.AddSingleton(new OrderingSettings(flow)); // thắng TryAddSingleton(Default) trong AddApplication()
+        if (flow != PaymentFlow.Messaging)
+        {
+            return services;
+        }
+
+        services.AddScoped<OutboxDispatcher>();
+        services.AddScoped<IIntegrationEventBus, MassTransitIntegrationEventBus>();
+        services.AddHostedService<OutboxPublisherWorker>();
+
+        services.AddMassTransit(bus =>
+        {
+            // Tên queue: "ordering-payment-completed" (tiền tố service → 2 service không tranh nhau 1 queue)
+            bus.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("ordering", false));
+            bus.AddConsumer<PaymentCompletedConsumer>();
+            bus.AddConsumer<PaymentFailedConsumer>();
+
+            // Aspire bơm ConnectionStrings__messaging=amqp://guest:...@localhost:port (tên resource "messaging" trong AppHost)
+            string? rabbit = configuration.GetConnectionString("messaging");
+            if (string.IsNullOrWhiteSpace(rabbit))
+            {
+                // Không có broker: bus trong bộ nhớ của CHÍNH tiến trình này (test tích hợp). Không nói chuyện được với Payment.
+                bus.UsingInMemory((context, cfg) => ConfigureEndpoints(context, cfg));
+            }
+            else
+            {
+                bus.UsingRabbitMq((context, cfg) =>
+                {
+                    cfg.Host(new Uri(rabbit));
+                    ConfigureEndpoints(context, cfg);
+                });
+            }
+        });
+        return services;
+    }
+
+    // 👉 Bước 6 (b55.md): resilience phía message — lỗi tạm thời (DB deadlock, timeout) thử lại 3 lần, giãn dần;
+    // vẫn lỗi → MassTransit chuyển message sang queue "<tên>_error" (không mất, không chặn message sau).
+    // Lỗi nghiệp vụ / dữ liệu sai (DomainException, ValidationException) thử lại cũng vô ích → Ignore.
+    private static void ConfigureEndpoints<TEndpoint>(IBusRegistrationContext context, IBusFactoryConfigurator<TEndpoint> cfg)
+        where TEndpoint : IReceiveEndpointConfigurator
+    {
+        cfg.UseMessageRetry(retry =>
+        {
+            retry.Intervals(TimeSpan.FromMilliseconds(200), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5));
+            retry.Ignore<Domain.Common.DomainException>();
+            retry.Ignore<Application.Common.Exceptions.ValidationException>();
+        });
+        cfg.ConfigureEndpoints(context);
     }
 
     // 👉 Bước 9 (b48.md)

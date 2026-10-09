@@ -1,5 +1,5 @@
 // ============================================================================
-// Fakes.cs — bản giả của các port (Buổi 51–53 · unit test không cần database).
+// Fakes.cs — bản giả của các port (Buổi 51–53 · 55 · unit test không cần database).
 // Mỗi fake chỉ làm đúng việc test cần (lưu vào List/Dictionary, đếm số lần gọi). Tự viết vài chục dòng
 // thay vì dùng thư viện mock: đọc test là hiểu ngay, không phải học cú pháp Setup/Verify.
 // ============================================================================
@@ -16,6 +16,7 @@ using CyberCafe.Domain.Orders;
 using CyberCafe.Domain.Payments;
 using CyberCafe.Domain.People;
 using CyberCafe.Domain.Products;
+using CyberCafe.IntegrationEvents;
 using Microsoft.Extensions.Logging;
 
 namespace CyberCafe.Application.Tests;
@@ -109,6 +110,85 @@ public sealed class FakeUnitOfWork : IUnitOfWork
         this.Transactions++;
         return work(ct);
     }
+}
+
+/// <summary>
+/// Buổi 55: IUnitOfWork giả có "transaction": ghi lại mỗi lần lưu xảy ra TRONG hay NGOÀI transaction,
+/// gán Id cho đơn vừa Add ở lần lưu (giống IDENTITY của SQL Server), và cho phép làm hỏng lần lưu thứ N.
+/// </summary>
+public sealed class TransactionalUnitOfWork(FakeOrderRepository orders) : IUnitOfWork
+{
+    private int _nextId = 100;
+
+    /// <summary>Đang ở trong ExecuteInTransactionAsync.</summary>
+    public bool InTransaction { get; private set; }
+
+    /// <summary>Mỗi lần lưu: có nằm trong transaction không.</summary>
+    public List<bool> Saves { get; } = [];
+
+    /// <summary>Transaction kết thúc bằng commit (true) / rollback (false).</summary>
+    public List<bool> Outcomes { get; } = [];
+
+    /// <summary>Lần lưu thứ mấy (1, 2...) sẽ ném lỗi (mô phỏng DB lỗi khi ghi outbox). 0 = không lỗi.</summary>
+    public int FailOnSave { get; init; }
+
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        this.Saves.Add(this.InTransaction);
+        if (this.Saves.Count == this.FailOnSave)
+        {
+            throw new InvalidOperationException("DB lỗi giả lập");
+        }
+
+        foreach (Order order in orders.Added.Where(o => o.Id == 0))
+        {
+            typeof(Order).GetProperty(nameof(Order.Id))!.SetValue(order, this._nextId++);
+        }
+
+        return Task.FromResult(1);
+    }
+
+    public async Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken ct = default)
+    {
+        this.InTransaction = true;
+        try
+        {
+            T result = await work(ct);
+            this.Outcomes.Add(true);
+            return result;
+        }
+        catch
+        {
+            this.Outcomes.Add(false);
+            throw;
+        }
+        finally
+        {
+            this.InTransaction = false;
+        }
+    }
+}
+
+/// <summary>Buổi 55: outbox giả — ghi lại event + "lúc Enqueue có đang trong transaction không".</summary>
+public sealed class RecordingOutbox(TransactionalUnitOfWork? unitOfWork = null) : IIntegrationEventOutbox
+{
+    /// <summary>Các event đã xếp vào outbox.</summary>
+    public List<(IIntegrationEvent Event, bool InTransaction)> Enqueued { get; } = [];
+
+    public void Enqueue(IIntegrationEvent integrationEvent) =>
+        this.Enqueued.Add((integrationEvent, unitOfWork?.InTransaction ?? false));
+}
+
+/// <summary>Buổi 55: inbox giả trong bộ nhớ.</summary>
+public sealed class FakeInbox : IInbox
+{
+    /// <summary>(MessageId, Consumer) đã xử lý.</summary>
+    public HashSet<(Guid, string)> Processed { get; } = [];
+
+    public Task<bool> HasProcessedAsync(Guid messageId, string consumer, CancellationToken ct = default) =>
+        Task.FromResult(this.Processed.Contains((messageId, consumer)));
+
+    public void MarkProcessed(Guid messageId, string consumer) => this.Processed.Add((messageId, consumer));
 }
 
 /// <summary>IOrderNotifier ghi lại các đơn đã "báo".</summary>
