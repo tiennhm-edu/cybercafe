@@ -1,7 +1,7 @@
 // ============================================================================
 // AppExceptions.cs — exception "có chủ đích" của tầng Application (Buổi 42–47 · 48).
 // Buổi 42–47: file này là Api/Errors/ApiExceptions.cs (chỉ có 401 + 409).
-// Buổi 48: chuyển xuống Application vì use case (MenuService, OrderService, AuthService) mới là nơi
+// Buổi 48: chuyển xuống Application vì use case (MenuService, handler, AuthService) mới là nơi
 //   phát hiện "không tìm thấy", "dữ liệu sai", "trùng" — nhưng use case KHÔNG được biết HTTP.
 //   → Ném exception mang NGHĨA nghiệp vụ; DomainExceptionHandler (Api) dịch sang mã HTTP:
 //     NotFoundException → 404 · ValidationException → 400 · ConflictException → 409 · AuthenticationFailed → 401

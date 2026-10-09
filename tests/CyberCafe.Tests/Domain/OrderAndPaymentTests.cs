@@ -1,5 +1,6 @@
 // ============================================================================
 // OrderAndPaymentTests.cs — unit test cho Order, Payment, Person (Buổi 24–31 · Domain test).
+// Buổi 49: Order.Checkout(...) đổi tên thành Order.Pay(...) — method nghiệp vụ của aggregate (xem OrderAggregateTests).
 // ============================================================================
 using CyberCafe.Domain.Discounts;
 using CyberCafe.Domain.Orders;
@@ -25,14 +26,14 @@ public class OrderAndPaymentTests
         return cart.ToOrder(new Customer("Bình", "0912345678"));
     }
 
-    // Kiểm tra: Checkout gán Amount của payment = FinalAmount (sau giảm giá), đánh dấu đã trả và lưu payment vào đơn.
+    // Kiểm tra: Pay gán Amount của payment = FinalAmount (sau giảm giá), đánh dấu đã trả và lưu payment vào đơn.
     [Fact]
-    public void Checkout_SyncsPaymentAmountWithFinalAmount()
+    public void Pay_SyncsPaymentAmountWithFinalAmount()
     {
         Order order = CreateOrder(35000, 2, new VoucherDiscount("V", "V20K", 20000)); // 70k - 20k
         CardPayment payment = new(0, "4111111111111111", "VCB");
 
-        order.Checkout(payment);
+        order.Pay(payment);
 
         Assert.Equal(50000, payment.Amount);
         Assert.True(payment.IsPaid);
@@ -41,11 +42,11 @@ public class OrderAndPaymentTests
 
     // Kiểm tra: thanh toán xong cộng điểm cho khách, 10.000 đ = 1 điểm.
     [Fact]
-    public void Checkout_AddsLoyaltyPoint_Per10k()
+    public void Pay_AddsLoyaltyPoint_Per10k()
     {
         Order order = CreateOrder(35000, 2); // 70.000 → 7 điểm
 
-        order.Checkout(new CashPayment(70000, 70000));
+        order.Pay(new CashPayment(70000, 70000));
 
         Assert.Equal(7, order.Customer.LoyaltyPoints);
     }

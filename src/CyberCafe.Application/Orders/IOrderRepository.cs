@@ -1,33 +1,23 @@
 // ============================================================================
-// IOrderRepository.cs — cổng truy cập dữ liệu đơn hàng (Buổi 48 · Clean Architecture).
-// Gom các truy vấn trước nằm rải trong OrdersController + OrderHub (Include, EF.Property "UserId"...).
-// "Chủ đơn" (cột Orders.UserId) vẫn là SHADOW PROPERTY như b47: Domain.Order chưa biết khái niệm tài khoản
-// → interface nhận/trả ownerUserId riêng, Infrastructure đọc/ghi shadow property. (b53 sẽ bàn lại chuyện này.)
+// IOrderRepository.cs — cổng GHI của aggregate Order (Buổi 48 · 49 · 51).
+// b48: 1 interface vừa đọc vừa ghi (FindWithDetails, GetPageByOwner, GetPageByStatus, shadow "UserId"...).
+// b49 (DDD): "1 repository cho 1 AGGREGATE ROOT" — chỉ tải/thêm NGUYÊN aggregate để gọi method nghiệp vụ.
+//   Chủ đơn giờ là Order.OwnerId (property thật) → hết method GetOwnerId/shadow property.
+// b51 (CQRS): mọi truy vấn hiển thị (danh sách, chi tiết) chuyển sang IOrderReadStore (phía ĐỌC).
+// ⚠️ Lỗi hay gặp: thêm GetByStatusAsync, GetTodayRevenue... vào repository "cho tiện" → repository phình thành
+//    "God object". Đọc để hiển thị → read store; đọc để SỬA → repository.
 // ============================================================================
-using CyberCafe.Contracts.Common;
 using CyberCafe.Domain.Orders;
 
 namespace CyberCafe.Application.Orders;
 
-// 👉 Bước 6 (b48.md)
-/// <summary>Đọc/ghi đơn hàng. Cài đặt: Infrastructure/Persistence/Repositories/OrderRepository.cs.</summary>
+// 👉 Bước 4 (b49.md)
+/// <summary>Tải / thêm aggregate Order. Cài đặt: Infrastructure/Persistence/Repositories/OrderRepository.cs.</summary>
 public interface IOrderRepository
 {
-    /// <summary>Đơn kèm dòng + món + giảm giá + thanh toán, ĐANG ĐƯỢC THEO DÕI (để đổi trạng thái); null nếu không có.</summary>
-    Task<Order?> FindWithDetailsAsync(int id, CancellationToken ct = default);
+    /// <summary>Tải NGUYÊN aggregate (dòng + món + giảm giá + thanh toán), đang được theo dõi để sửa; null nếu không có.</summary>
+    Task<Order?> GetAsync(int id, CancellationToken ct = default);
 
-    /// <summary>Thêm đơn mới, gắn chủ đơn (lấy từ token, KHÔNG từ body).</summary>
-    void Add(Order order, int? ownerUserId);
-
-    /// <summary>Chủ của 1 đơn ĐANG ĐƯỢC THEO DÕI (đọc shadow property).</summary>
-    int? GetOwnerId(Order order);
-
-    /// <summary>Chủ của đơn theo Id (chỉ SELECT 1 cột); null nếu đơn không tồn tại hoặc chưa có chủ.</summary>
-    Task<int?> GetOwnerIdAsync(int orderId, CancellationToken ct = default);
-
-    /// <summary>Đơn của 1 tài khoản, mới nhất trước (không tracking).</summary>
-    Task<PagedResult<Order>> GetPageByOwnerAsync(int? ownerUserId, int page, int pageSize, CancellationToken ct = default);
-
-    /// <summary>Đơn theo trạng thái (màn hình quầy), mới nhất trước (không tracking).</summary>
-    Task<PagedResult<Order>> GetPageByStatusAsync(IReadOnlyCollection<OrderStatus> statuses, int page, int pageSize, CancellationToken ct = default);
+    /// <summary>Thêm đơn mới (INSERT khi IUnitOfWork.SaveChangesAsync).</summary>
+    void Add(Order order);
 }

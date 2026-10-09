@@ -1,12 +1,16 @@
 // ============================================================================
-// OrderConfiguration.cs — map Order + Customer + OrderItem (Buổi 36–41 · 48 · Fluent API, owned type,
-//                         quan hệ 1-n, value conversion cho enum, backing field).
+// OrderConfiguration.cs — map Order + Customer + OrderItem (Buổi 36–41 · 48 · 49–50 · Fluent API, owned type,
+//                         quan hệ 1-n, value conversion cho enum, backing field, value object Money).
 // Lược đồ sinh ra:
-//   Orders(Id, Status, CreatedAt, Note, CustomerName, CustomerPhone, CustomerLoyaltyPoints, DiscountId, PaymentId)
+//   Orders(Id, Status, CreatedAt, Note, CustomerName, CustomerPhone, CustomerLoyaltyPoints, DiscountId, PaymentId, UserId)
 //   OrderItems(Id, OrderId → Orders, ProductId → Products, Size, Quantity, UnitPrice)
+// Buổi 49–50 (DDD): Order thành aggregate (DomainEvents, OwnerId), UnitPrice thành Money — nhưng LƯỢC ĐỒ
+//   KHÔNG ĐỔI 1 cột nào → không cần migration mới (Migrations_AreUpToDate vẫn xanh). Đây là lợi ích của
+//   Fluent API: đổi mô hình C# mà vẫn map vào đúng bảng cũ.
 // ============================================================================
-using CyberCafe.Infrastructure.Identity;
+using CyberCafe.Domain.Common;
 using CyberCafe.Domain.Orders;
+using CyberCafe.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -22,13 +26,18 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.ToTable("Orders");
         builder.HasKey(o => o.Id); // int → SQL Server IDENTITY(1,1)
 
+        // 👉 Bước 4 (b49.md): domain event chỉ sống trong bộ nhớ tới khi phát — KHÔNG phải cột/bảng.
+        // ⚠️ Lỗi hay gặp: quên Ignore → EF cố map IReadOnlyCollection<IDomainEvent> thành quan hệ → lỗi khi dựng model.
+        builder.Ignore(o => o.DomainEvents);
+        // Code (OrderCode) tính từ Id; các tổng tiền (Money) tính từ Items — không lưu
+        builder.Ignore(o => o.Code);
+
         // Enum → chuỗi: cột Status lưu "Pending" thay vì số 0.
         // Đọc DB bằng mắt dễ hơn, và chèn thêm giá trị enum ở giữa không làm "lệch" dữ liệu cũ.
         // ⚠️ Lỗi hay gặp: đổi TÊN 1 giá trị enum sau khi đã có dữ liệu → dòng cũ không đọc lại được.
         builder.Property(o => o.Status).HasConversion<string>().HasMaxLength(20);
 
-        // Note / CreatedAt chỉ có { get; } trong domain. Khai báo tường minh → EF dùng backing field
-        // do compiler sinh để ghi giá trị khi đọc từ DB (property không có setter vẫn map được).
+        // Note / CreatedAt có private set trong domain → EF vẫn ghi được khi đọc từ DB.
         builder.Property(o => o.Note).HasMaxLength(200);
         builder.Property(o => o.CreatedAt);
 
@@ -62,16 +71,16 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasOne(o => o.Discount).WithOne().HasForeignKey<Order>("DiscountId");
         builder.HasOne(o => o.Payment).WithOne().HasForeignKey<Order>("PaymentId");
 
-        // Buổi 42–47: đơn thuộc về tài khoản nào → cột Orders.UserId (SHADOW property, domain không biết User).
+        // Buổi 42–48: chủ đơn là SHADOW property "UserId" (domain không biết User).
+        // 👉 Bước 4 (b49.md): giờ là property THẬT Order.OwnerId — map vào ĐÚNG cột cũ "UserId" (HasColumnName)
+        // → tên cột, khóa ngoại FK_Orders_Users_UserId, index IX_Orders_UserId giữ nguyên, DB cũ không phải sửa.
         // Nullable: đơn tạo trước khi có đăng nhập (b40) vẫn hợp lệ. Restrict: không xóa user đang có đơn.
-        // Đọc/ghi bằng EF.Property<int?>(o, OwnerUserId) / db.Entry(order).Property(OwnerUserId).
-        // Buổi 48: chỉ OrderRepository (cùng tầng Infrastructure) chạm vào tên này — Application không biết shadow property.
-        builder.Property<int?>(OwnerUserId);
-        builder.HasOne<User>().WithMany().HasForeignKey(OwnerUserId).OnDelete(DeleteBehavior.Restrict);
+        builder.Property(o => o.OwnerId).HasColumnName(OwnerUserIdColumn);
+        builder.HasOne<User>().WithMany().HasForeignKey(o => o.OwnerId).OnDelete(DeleteBehavior.Restrict);
     }
 
-    /// <summary>Tên shadow property khóa ngoại tới Users (dùng lại trong OrderRepository).</summary>
-    public const string OwnerUserId = "UserId";
+    /// <summary>Tên cột khóa ngoại tới Users (giữ từ b42 để SQL viết tay / báo cáo dùng lại).</summary>
+    public const string OwnerUserIdColumn = "UserId";
 }
 
 /// <summary>Cấu hình bảng OrderItems.</summary>
@@ -88,7 +97,13 @@ public class OrderItemConfiguration : IEntityTypeConfiguration<OrderItem>
 
         builder.Property(i => i.Size).HasConversion<string>().HasMaxLength(1);
         builder.Property(i => i.Quantity);
-        builder.Property(i => i.UnitPrice).HasPrecision(18, 2);
+
+        // 👉 Bước 2 (b50.md): VALUE CONVERTER — C# dùng Money (value object), cột vẫn là decimal(18,2).
+        //   Ghi: Money → m.Amount;  Đọc: decimal → new Money(v) (đi qua constructor → vẫn kiểm tra không âm).
+        // Cách khác: OwnsOne / ComplexProperty (EF 8+) khi value object có NHIỀU cột (vd Money + Currency).
+        builder.Property(i => i.UnitPrice)
+            .HasConversion(money => money.Amount, amount => new Money(amount))
+            .HasPrecision(18, 2);
 
         // n OrderItem – 1 Product. Restrict: KHÔNG cho xóa món đã có trong đơn (mất lịch sử bán hàng).
         // ⚠️ EF InMemory (dùng trong test) không kiểm tra khóa ngoại → MenuService tự kiểm tra (IsSoldAsync) trước khi xóa.

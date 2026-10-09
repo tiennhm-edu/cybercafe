@@ -23,6 +23,12 @@
     <!-- Infrastructure tạo JWT mà không cần cả middleware JwtBearer — cùng version JwtBearer đang kéo theo, MIT -->
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.19.2" />
   </ItemGroup>
+  <ItemGroup Label="DDD + CQRS (Buổi 49–53)">
+    <!-- LoggingBehavior của dispatcher tự viết cần ILogger<T> — gói Abstractions, MIT -->
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <!-- ValidationBehavior: validator cho command/query — FluentValidation, Apache-2.0 (KHÔNG dùng MediatR 13+: giấy phép thương mại, xem ADR 0003) -->
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+  </ItemGroup>
   <ItemGroup Label="EF Core">
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />

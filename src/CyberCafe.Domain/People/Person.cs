@@ -1,5 +1,5 @@
 // ============================================================================
-// Person.cs — class cha cho người (Buổi 24–31 · Inheritance + static method).
+// Person.cs — class cha cho người (Buổi 24–31 · Inheritance + static method; Buổi 50: luật SĐT → PhoneNumber).
 // ============================================================================
 namespace CyberCafe.Domain.People;
 
@@ -51,17 +51,9 @@ public class Person
     }
 
     // static: quy tắc dùng chung, không cần object (MomoPayment cũng gọi)
-    /// <summary>
-    /// Kiểm tra SĐT: 10–11 chữ số, bắt đầu bằng 0.
-    /// <c>is &gt;= 10 and &lt;= 11</c> là pattern matching (C# 9) — gọn hơn viết 2 phép so sánh.
-    /// </summary>
-    public static bool IsValidPhoneNumber(string? value)
-    {
-        return !string.IsNullOrWhiteSpace(value)
-            && value.StartsWith('0')
-            && value.Length is >= 10 and <= 11
-            && value.All(char.IsDigit);
-    }
+    /// <summary>Kiểm tra SĐT: 10–11 chữ số, bắt đầu bằng 0 (ủy quyền cho <see cref="Common.PhoneNumber.IsValid"/>).</summary>
+    // Buổi 50: luật SĐT chuyển vào value object PhoneNumber (1 chỗ duy nhất); method này giữ lại cho code cũ gọi.
+    public static bool IsValidPhoneNumber(string? value) => Common.PhoneNumber.IsValid(value); // "Common." vì trùng tên property PhoneNumber
 
     /// <summary>Chuỗi mô tả "Họ tên - SĐT"; class con override để thêm thông tin.</summary>
     public virtual string Display()

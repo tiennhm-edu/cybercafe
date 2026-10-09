@@ -10,6 +10,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/CyberCafe.Tests/CyberCafe.Tests.csproj" />
     <Project Path="tests/CyberCafe.Api.Tests/CyberCafe.Api.Tests.csproj" />
+    <Project Path="tests/CyberCafe.Application.Tests/CyberCafe.Application.Tests.csproj" />
     <Project Path="tests/CyberCafe.ArchitectureTests/CyberCafe.ArchitectureTests.csproj" />
   </Folder>
 </Solution>

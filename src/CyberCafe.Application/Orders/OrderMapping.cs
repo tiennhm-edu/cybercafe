@@ -1,9 +1,12 @@
 // ============================================================================
-// OrderMapping.cs — Domain Order → OrderDto (Buổi 32–41 · 48).
+// OrderMapping.cs — Domain Order → OrderDto (Buổi 32–41 · 48 · 50).
 // Khác ProductMapping (projection trong SQL): đơn hàng cần LOGIC DOMAIN để ra số liệu
 // (Discount.GetDiscountAmount đa hình, Payment.Display()...) → không dịch sang SQL được.
 // Cách làm: Include đủ dữ liệu → EF dựng object domain → map trong bộ nhớ.
-// Buổi 48: chuyển từ Api/Mapping sang Application (OrderService map kết quả use case; Include nằm ở OrderRepository).
+// Buổi 48: chuyển từ Api/Mapping sang Application.
+// Buổi 50: tiền là Money, mã là OrderCode (value object) → DTO (hợp đồng JSON với Web) vẫn là decimal/string:
+//   value object là chuyện BÊN TRONG Domain, không làm đổi hợp đồng HTTP.
+// Buổi 51–53: dùng cho phía GHI (kết quả command, domain event). Phía ĐỌC có projection riêng (OrderReadStore).
 // ============================================================================
 using CyberCafe.Contracts.Orders;
 using CyberCafe.Domain.Orders;
@@ -19,7 +22,7 @@ public static class OrderMapping
     /// </summary>
     public static OrderDto ToDto(this Order order) => new(
         order.Id,
-        order.Code,
+        order.Code.Value,           // OrderCode → "CC-0007"
         order.Status,
         order.CreatedAt,
         order.Customer.FullName,
@@ -33,12 +36,12 @@ public static class OrderMapping
             i.Product.HasSize,
             i.Size,
             i.Quantity,
-            i.UnitPrice,
-            i.TotalPrice)).ToList(),
-        order.TotalAmount,
+            i.UnitPrice.Amount,     // Money → decimal
+            i.TotalPrice.Amount)).ToList(),
+        order.TotalAmount.Amount,
         order.Discount?.Display(),  // đa hình: Voucher hiện mã, Member hiện %
-        order.DiscountAmount,
-        order.FinalAmount,
+        order.DiscountAmount.Amount,
+        order.FinalAmount.Amount,
         order.Payment?.Method,
         order.Payment?.Display());  // đa hình: Cash/Card/Momo tự mô tả
 }

@@ -1,5 +1,5 @@
 // ============================================================================
-// CartTests.cs — unit test cho Cart, OrderItem, giá theo size (Buổi 24–31 · Domain test).
+// CartTests.cs — unit test cho Cart, OrderItem, giá theo size (Buổi 24–31 · Domain test; Buổi 50: tiền là Money).
 // Domain là C# thuần nên test chỉ cần new Cart() — không cần chạy Blazor hay trình duyệt.
 // Mỗi test theo mẫu AAA: Arrange (chuẩn bị) → Act (thực hiện) → Assert (kiểm tra).
 // ============================================================================
@@ -182,7 +182,7 @@ public class CartTests
         cart.UpdateQuantity(item, 5);
 
         Assert.Equal(1, order.ItemCount);
-        Assert.Equal(9000, order.FinalAmount);
+        Assert.Equal(9000, order.FinalAmount.Amount); // Money (b50) → so phần decimal
         Assert.Equal("Ít đá", order.Note);
     }
 }

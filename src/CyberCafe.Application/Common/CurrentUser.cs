@@ -1,7 +1,8 @@
 // ============================================================================
 // CurrentUser.cs — "ai đang gọi use case" ở dạng C# thuần (Buổi 48 · Clean Architecture).
 // Buổi 42–47: controller tự đọc this.User (ClaimsPrincipal) rồi kiểm tra IsStaff / chủ đơn ngay trong action.
-// Buổi 48: luật "nhân viên xem mọi đơn, khách chỉ đơn của mình" là NGHIỆP VỤ → chuyển vào OrderService.
+// Buổi 48: luật "nhân viên xem mọi đơn, khách chỉ đơn của mình" là NGHIỆP VỤ → chuyển vào Application
+//   (b48: OrderService; b51–53: nằm trong command/query — CurrentUser đi kèm command như 1 trường dữ liệu).
 //   Nhưng Application không được biết ClaimsPrincipal/HttpContext (ASP.NET Core) → Api đổi claims
 //   thành record nhỏ này (ClaimsPrincipalExtensions.ToCurrentUser) rồi truyền vào.
 // Cách khác hay gặp: interface ICurrentUserService + IHttpContextAccessor. Ở đây truyền THAM SỐ cho rõ

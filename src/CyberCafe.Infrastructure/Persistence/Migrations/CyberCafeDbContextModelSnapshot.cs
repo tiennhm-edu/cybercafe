@@ -67,6 +67,10 @@ namespace CyberCafe.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int?>("OwnerId")
+                        .HasColumnType("int")
+                        .HasColumnName("UserId");
+
                     b.Property<int?>("PaymentId")
                         .HasColumnType("int");
 
@@ -74,9 +78,6 @@ namespace CyberCafe.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
-
-                    b.Property<int?>("UserId")
-                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -86,13 +87,13 @@ namespace CyberCafe.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("[DiscountId] IS NOT NULL");
 
+                    b.HasIndex("OwnerId");
+
                     b.HasIndex("PaymentId")
                         .IsUnique()
                         .HasFilter("[PaymentId] IS NOT NULL");
 
                     b.HasIndex("Status");
-
-                    b.HasIndex("UserId");
 
                     b.ToTable("Orders", (string)null);
                 });
@@ -485,14 +486,14 @@ namespace CyberCafe.Infrastructure.Persistence.Migrations
                         .WithOne()
                         .HasForeignKey("CyberCafe.Domain.Orders.Order", "DiscountId");
 
+                    b.HasOne("CyberCafe.Infrastructure.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CyberCafe.Domain.Payments.Payment", "Payment")
                         .WithOne()
                         .HasForeignKey("CyberCafe.Domain.Orders.Order", "PaymentId");
-
-                    b.HasOne("CyberCafe.Infrastructure.Identity.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.OwnsOne("CyberCafe.Domain.People.Customer", "Customer", b1 =>
                         {

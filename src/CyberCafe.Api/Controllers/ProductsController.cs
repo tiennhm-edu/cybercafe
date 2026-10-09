@@ -2,7 +2,8 @@
 // ProductsController.cs — CRUD thực đơn /api/products (Buổi 32–35 · REST CRUD;
 //                         Buổi 36–41 · EF Core: AsNoTracking, lọc/sắp xếp/phân trang, projection;
 //                         Buổi 42–47 · chỉ Admin được ghi, GET đi qua Redis cache, lỗi domain do handler toàn cục lo;
-//                         Buổi 48 · controller MỎNG: HTTP vào → MenuService → HTTP ra).
+//                         Buổi 48 · controller MỎNG: HTTP vào → MenuService → HTTP ra;
+//                         Buổi 51–53 · GET đi qua query (GetMenuQuery/GetProductByIdQuery), ghi giữ MenuService).
 // Bảng mã trạng thái (ghi: thiếu token → 401, không phải Admin → 403):
 //   GET    /api/products        200 + PagedResult        (400 nếu query sai)
 //   GET    /api/products/{id}   200 | 404
@@ -15,7 +16,9 @@
 using CyberCafe.Api.Auth;
 using CyberCafe.Api.Filters;
 using CyberCafe.Application.Caching;
+using CyberCafe.Application.Common.Messaging;
 using CyberCafe.Application.Products;
+using CyberCafe.Application.Products.Queries;
 using CyberCafe.Contracts.Common;
 using CyberCafe.Contracts.Products;
 using Microsoft.AspNetCore.Authorization;
@@ -30,7 +33,7 @@ namespace CyberCafe.Api.Controllers;
 // Buổi 42–47: mặc định MỌI action cần policy ManageMenu (Admin); action đọc mở lại bằng [AllowAnonymous].
 // "Đóng mặc định, mở có chủ đích" an toàn hơn "mở mặc định, nhớ đóng từng action".
 [Authorize(Policy = Policies.ManageMenu)]
-public class ProductsController(MenuService menu) : ControllerBase
+public class ProductsController(ISender sender, MenuService menu) : ControllerBase
 {
     /// <summary>Tên header cho biết response lấy từ cache (HIT) hay database (MISS) — tiện quan sát khi học.</summary>
     public const string CacheHeader = "X-Cache";
@@ -42,8 +45,8 @@ public class ProductsController(MenuService menu) : ControllerBase
     [ProducesResponseType<PagedResult<ProductDto>>(StatusCodes.Status200OK)]
     public async Task<PagedResult<ProductDto>> GetPage([FromQuery] ProductQuery query, CancellationToken ct)
     {
-        // 👉 Bước 8 (b47.md): cache-aside — giờ nằm trong MenuService.GetPageAsync (👉 Bước 7 b48.md)
-        CacheResult<PagedResult<ProductDto>> result = await menu.GetPageAsync(query, ct);
+        // 👉 Bước 8 (b47.md): cache-aside — b48 nằm trong MenuService, 👉 Bước 3 (b53.md): giờ là GetMenuQuery
+        CacheResult<PagedResult<ProductDto>> result = await sender.Send(new GetMenuQuery(query), ct);
         this.Response.Headers[CacheHeader] = result.Hit ? "HIT" : "MISS"; // header là chuyện HTTP → ở lại controller
         return result.Value;
     }
@@ -55,7 +58,7 @@ public class ProductsController(MenuService menu) : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ProductDto>> GetById(int id, CancellationToken ct)
     {
-        CacheResult<ProductDto?> result = await menu.GetByIdAsync(id, ct);
+        CacheResult<ProductDto?> result = await sender.Send(new GetProductByIdQuery(id), ct);
         this.Response.Headers[CacheHeader] = result.Hit ? "HIT" : "MISS";
 
         // NotFound() trong [ApiController] tự trả body ProblemDetails (type, title, status, traceId)

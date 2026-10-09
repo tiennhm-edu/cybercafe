@@ -1,5 +1,5 @@
 // ============================================================================
-// DependencyInjection.cs — đăng ký mọi "adapter" hạ tầng (Buổi 48 · composition root).
+// DependencyInjection.cs — đăng ký mọi "adapter" hạ tầng (Buổi 48 · composition root; Buổi 53 · read model).
 // Những dòng này trước nằm rải trong Program.cs (b47): AddDbContext, JwtOptions, BCrypt, Redis...
 // Gom về đây → Program.cs chỉ gọi builder.Services.AddInfrastructure(builder.Configuration).
 // Mỗi dòng "AddScoped<IPort, Adapter>()" chính là chỗ NỐI interface của Application với cài đặt cụ thể.
@@ -9,11 +9,13 @@ using CyberCafe.Application.Auth;
 using CyberCafe.Application.Caching;
 using CyberCafe.Application.Common.Interfaces;
 using CyberCafe.Application.Orders;
+using CyberCafe.Application.Orders.Queries;
 using CyberCafe.Application.Products;
 using CyberCafe.Application.Reports;
 using CyberCafe.Infrastructure.Caching;
 using CyberCafe.Infrastructure.Identity;
 using CyberCafe.Infrastructure.Persistence;
+using CyberCafe.Infrastructure.Persistence.ReadModels;
 using CyberCafe.Infrastructure.Persistence.Repositories;
 using CyberCafe.Infrastructure.Realtime;
 using CyberCafe.Infrastructure.Reports;
@@ -39,13 +41,15 @@ public static class DependencyInjection
         // 👉 Bước 3 (b40.md): AddDbContext mặc định SCOPED = 1 instance / request.
         // Connection string "ConnectionStrings:CyberCafe" (appsettings.Development.json / user-secrets / biến môi trường).
         // ⚠️ Lỗi hay gặp: đăng ký DbContext là Singleton → nhiều request dùng chung 1 DbContext → lỗi đa luồng.
+        // Buổi 50: DI tự truyền IDomainEventPublisher (đăng ký trong AddApplication) vào constructor DbContext.
         services.AddDbContext<CyberCafeDbContext>(options =>
             options.UseSqlServer(configuration.GetConnectionString("CyberCafe")));
         // Cùng 1 DbContext của request cho cả repository lẫn IUnitOfWork → SaveChanges lưu đúng thứ repository đã Add.
         // ⚠️ Lỗi hay gặp: AddScoped<IUnitOfWork, CyberCafeDbContext>() → DI tạo DbContext THỨ HAI, SaveChanges không lưu gì.
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<CyberCafeDbContext>());
         services.AddScoped<IProductRepository, ProductRepository>();
-        services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<IOrderRepository, OrderRepository>();   // phía GHI: aggregate (b49)
+        services.AddScoped<IOrderReadStore, OrderReadStore>();     // phía ĐỌC: projection (b53)
         services.AddScoped<IRevenueReportService, RevenueReportService>();
 
         // ----- Identity (Buổi 42–47) -----

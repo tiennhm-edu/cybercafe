@@ -2,10 +2,12 @@
 
   <!--
     CyberCafe.Application (Buổi 48 · Clean Architecture): tầng USE CASE.
-    Chứa: service nghiệp vụ (MenuService, OrderService), interface "cổng" (port) mà tầng ngoài phải cài đặt
+    Chứa: use case (MenuService; b51+ command/query handler), interface "cổng" (port) mà tầng ngoài phải cài đặt
     (IProductRepository, IOrderRepository, IUnitOfWork, IMenuCache, IOrderNotifier, IAuthService...),
     mapping Domain → DTO, exception có nghĩa nghiệp vụ (NotFound/Validation/Conflict).
     Luật vàng: KHÔNG tham chiếu EF Core, ASP.NET Core hay Infrastructure (architecture test kiểm tra).
+    Buổi 49–53 (CQRS): thêm dispatcher tự viết (Common/Messaging), pipeline behavior (Common/Behaviors),
+    command/query + handler theo từng use case (Orders/Commands, Orders/Queries, Products/Queries).
     ⚠️ Lỗi hay gặp: thêm PackageReference EF Core vào đây "cho tiện viết LINQ" → Application dính chặt database.
   -->
   <PropertyGroup>
@@ -15,6 +17,9 @@
   <ItemGroup>
     <!-- Chỉ gói "Abstractions" (interface IServiceCollection) để viết AddApplication(); không kéo ASP.NET Core theo -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <!-- Buổi 52: ILogger cho LoggingBehavior; FluentValidation (Apache-2.0) cho ValidationBehavior -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="FluentValidation" />
   </ItemGroup>
 
   <ItemGroup>

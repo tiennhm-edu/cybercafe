@@ -1,5 +1,5 @@
 // ============================================================================
-// DomainExceptionHandler.cs — xử lý exception TOÀN CỤC → ProblemDetails (Buổi 42–47 · 48).
+// DomainExceptionHandler.cs — xử lý exception TOÀN CỤC → ProblemDetails (Buổi 42–47 · 48 · 49).
 // .NET 8+ có sẵn IExceptionHandler + app.UseExceptionHandler(): không cần tự viết try/catch middleware
 // như lab webapi b42 (GlobalExceptionMiddleware) — cùng ý tưởng, ít code hơn.
 // Nhờ handler này, controller bỏ được các khối try/catch lặp lại của b40.
@@ -7,13 +7,15 @@
 //   AuthenticationFailedException (Application)    → 401
 //   ValidationException (Application, b48)         → 400 ValidationProblem { errors: { field: [...] } }
 //   NotFoundException (Application, b48)           → 404 (body giống NotFound() của [ApiController])
-//   ConflictException (Application)                → 409 (title riêng: "Không xóa được món", "Không hủy được đơn"...)
+//   ConflictException (Application)                → 409 (title riêng: "Không xóa được món", "Dữ liệu bị trùng"...)
+//   DomainException (Domain, b49)                  → 409 (aggregate từ chối: sai luồng, đã thanh toán, khách hủy đơn đang pha...)
 //   ArgumentException      ném từ Domain/Contracts → 400 (dữ liệu vi phạm luật domain)
 //   InvalidOperationException ném từ Domain        → 409 (xung đột trạng thái: món hết, sai luồng đơn...)
 //   Mọi exception khác (lỗi EF, bug...)            → return false → handler mặc định trả 500 (không lộ chi tiết)
 // Buổi 48: use case ở Application ném exception có NGHĨA (không biết HTTP); file này là nơi DUY NHẤT dịch sang mã HTTP.
 // ============================================================================
 using CyberCafe.Application.Common.Exceptions;
+using CyberCafe.Domain.Common;
 using CyberCafe.Domain.Orders;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -26,7 +28,7 @@ public class DomainExceptionHandler(IProblemDetailsService problemDetails, ILogg
     /// <summary>Trả true nếu đã xử lý (đã ghi response), false để handler kế tiếp/mặc định lo.</summary>
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        // 👉 Bước 7 (b47.md) · 👉 Bước 4 (b48.md)
+        // 👉 Bước 7 (b47.md) · 👉 Bước 4 (b48.md) · 👉 Bước 1 (b49.md)
         ProblemDetails? problem = exception switch
         {
             AuthenticationFailedException => Problem(StatusCodes.Status401Unauthorized, "Xác thực thất bại", exception.Message),
@@ -38,6 +40,8 @@ public class DomainExceptionHandler(IProblemDetailsService problemDetails, ILogg
             // Title/Detail để trống → ProblemDetails mặc định điền "Not Found" + type RFC 9110, giống hệt b47
             NotFoundException => new ProblemDetails { Status = StatusCodes.Status404NotFound },
             ConflictException conflict => Problem(StatusCodes.Status409Conflict, conflict.Title, conflict.Message),
+            // Đặt TRƯỚC dòng InvalidOperationException: DomainException kế thừa nó, switch chọn nhánh khớp ĐẦU TIÊN
+            DomainException => Problem(StatusCodes.Status409Conflict, "Vi phạm quy tắc nghiệp vụ", exception.Message),
             ArgumentException when IsFromDomain(exception) => Problem(StatusCodes.Status400BadRequest, "Dữ liệu không hợp lệ", exception.Message),
             InvalidOperationException when IsFromDomain(exception) => Problem(StatusCodes.Status409Conflict, "Vi phạm quy tắc nghiệp vụ", exception.Message),
             _ => null

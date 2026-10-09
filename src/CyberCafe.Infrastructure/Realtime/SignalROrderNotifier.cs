@@ -2,7 +2,7 @@
 // SignalROrderNotifier.cs — gửi sự kiện SignalR từ BÊN NGOÀI hub (Buổi 33–34 · 48 · IHubContext, adapter).
 // Code nghiệp vụ không phải hub, không có Clients → xin IHubContext<THub, IOrderClient> qua DI.
 // Bọc sau interface IOrderNotifier (Application) để:
-//   - Use case (OrderService) không phụ thuộc SignalR.
+//   - Use case (b48 OrderService, b50+ handler domain event) không phụ thuộc SignalR.
 //   - Test tích hợp thay bằng bản giả, kiểm tra "đã thông báo đúng đơn chưa".
 // Buổi 48: tách khỏi file chứa interface (b40: Api/Realtime/OrderNotifier.cs) và chuyển sang Infrastructure.
 //   Vướng mắc: IHubContext<OrderHub, ...> cần KIỂU OrderHub, mà OrderHub là "cửa vào" nằm ở Api —

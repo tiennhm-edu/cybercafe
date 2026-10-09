@@ -1,8 +1,10 @@
 // ============================================================================
-// OrderStatusFlowTests.cs — luồng trạng thái đơn (Buổi 32–41 · state machine trong Domain).
+// OrderStatusFlowTests.cs — luồng trạng thái đơn (Buổi 32–41 · state machine trong Domain; Buổi 49: aggregate).
 // Test thuần C#: không cần Api, không cần database — luật nghiệp vụ test được độc lập.
 // ============================================================================
+using CyberCafe.Domain.Common;
 using CyberCafe.Domain.Orders;
+using CyberCafe.Domain.Payments;
 using CyberCafe.Domain.People;
 using CyberCafe.Domain.Products;
 
@@ -14,7 +16,9 @@ public class OrderStatusFlowTests
     {
         Cart cart = new();
         cart.AddItem(new Coffee("Bạc xỉu", 32000, "Robusta") { Id = 2 });
-        return cart.ToOrder(new Customer("An", "0901234567"));
+        Order order = cart.ToOrder(new Customer("An", "0901234567"));
+        order.Pay(new CashPayment(0, 32000)); // Buổi 49: invariant "chưa thanh toán thì chưa pha" → trả tiền trước
+        return order;
     }
 
     // Kiểm tra: đi đúng luồng Pending → Preparing → Ready → Completed thành công.
@@ -43,13 +47,13 @@ public class OrderStatusFlowTests
         Assert.False(OrderStatusFlow.CanChange(from, to));
     }
 
-    // Kiểm tra: ChangeStatus sai luồng ném InvalidOperationException và giữ nguyên trạng thái cũ.
+    // Kiểm tra: ChangeStatus sai luồng ném DomainException (b49; vẫn là InvalidOperationException) và giữ nguyên trạng thái cũ.
     [Fact]
     public void ChangeStatus_Invalid_ThrowsAndKeepsStatus()
     {
         Order order = NewOrder();
 
-        Assert.Throws<InvalidOperationException>(() => order.ChangeStatus(OrderStatus.Ready));
+        Assert.Throws<DomainException>(() => order.ChangeStatus(OrderStatus.Ready));
         Assert.Equal(OrderStatus.Pending, order.Status);
     }
 
@@ -73,6 +77,6 @@ public class OrderStatusFlowTests
 
         coffee.UpdatePrice(50000);
 
-        Assert.Equal(40000, order.FinalAmount);
+        Assert.Equal(40000, order.FinalAmount.Amount);
     }
 }

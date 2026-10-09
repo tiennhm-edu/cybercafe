@@ -1,8 +1,9 @@
 // ============================================================================
-// IOrderNotifier.cs — cổng thông báo realtime về đơn hàng (Buổi 33–34 · 48).
+// IOrderNotifier.cs — cổng thông báo realtime về đơn hàng (Buổi 33–34 · 48 · 50).
 // Buổi 33–34: interface + bản SignalR nằm chung file Api/Realtime/OrderNotifier.cs.
 // Buổi 48: TÁCH ĐÔI theo Clean Architecture:
-//   - Interface (file này) ở Application: OrderService chỉ cần "báo cho quầy biết", không cần biết SignalR.
+//   - Interface (file này) ở Application: use case chỉ cần "báo cho quầy biết", không cần biết SignalR.
+//     (b50: người gọi là handler domain event trong Orders/EventHandlers, không còn gọi tay sau SaveChanges.)
 //   - Adapter SignalROrderNotifier<THub> ở Infrastructure/Realtime: dùng IHubContext để gửi thật.
 // Test tích hợp vẫn thay bằng RecordingOrderNotifier y như cũ (chỉ đổi using).
 // ============================================================================

@@ -4,7 +4,7 @@
 // Policy đặt TÊN theo việc được làm ("ManageMenu"), còn "ai được làm" khai báo 1 chỗ ở đây.
 //   ManageMenu    → Admin                  (thêm/sửa/xóa món, xem báo cáo)
 //   ProcessOrders → Barista, Admin         (xem mọi đơn, đổi trạng thái, vào group barista)
-//   PlaceOrders   → Customer               (đặt đơn; xem/hủy ĐƠN CỦA MÌNH — kiểm tra thêm trong OrderService)
+//   PlaceOrders   → Customer               (đặt đơn; xem/hủy ĐƠN CỦA MÌNH — kiểm tra thêm trong handler/query, b53)
 // Buổi 48: policy vẫn ở Api (gắn với HTTP/hub); thêm ToCurrentUser() để đưa "ai đang gọi" xuống Application.
 // ============================================================================
 using System.Security.Claims;

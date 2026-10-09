@@ -2,9 +2,11 @@
 // OrdersEndpointTests.cs — test tích hợp /api/orders (Buổi 32–41 · đặt hàng, luồng trạng thái, Include).
 // Mỗi test 1 factory riêng → database InMemory riêng, Id đơn luôn bắt đầu từ 1.
 // Buổi 42–47: khách (customer) đặt đơn, barista đổi trạng thái — quyền chi tiết xem AuthorizationTests.
+// Buổi 49–53: cùng các test này chạy qua aggregate + dispatcher + read model — hợp đồng HTTP không đổi.
 // ============================================================================
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using CyberCafe.Contracts.Common;
 using CyberCafe.Contracts.Orders;
 using CyberCafe.Domain.Orders;
@@ -165,6 +167,40 @@ public class OrdersEndpointTests : IAsyncLifetime
 
         Assert.Equal(OrderStatus.Cancelled, (await cancelFirst.ReadAsync<OrderDto>()).Status);
         Assert.Equal(HttpStatusCode.Conflict, cancelSecond.StatusCode);
+    }
+
+    // Kiểm tra (b53 · CQRS): READ MODEL (projection) ra ĐÚNG dữ liệu như phía GHI (aggregate → DTO) — cùng 1 đơn
+    // đọc qua POST (kết quả command), GET /{id}, GET /mine và bảng quầy phải giống hệt nhau từng trường.
+    [Fact]
+    public async Task ReadModel_MatchesWriteModel()
+    {
+        PlaceOrderRequest request = TestData.Order("MEMBER10", new OrderLineRequest(1, DrinkSize.L, 2), new OrderLineRequest(7, DrinkSize.M, 1), new OrderLineRequest(4, DrinkSize.S, 1));
+        request.PaymentMethod = PaymentMethod.Momo;
+        OrderDto written = await this._client.PlaceAsync(request);
+
+        OrderDto byId = (await this._client.GetFromJsonAsync<OrderDto>($"/api/orders/{written.Id}", CyberCafeApiFactory.Json))!;
+        OrderDto mine = Assert.Single((await this._client.GetFromJsonAsync<PagedResult<OrderDto>>("/api/orders/mine", CyberCafeApiFactory.Json))!.Items);
+        OrderDto board = Assert.Single((await this._barista.GetFromJsonAsync<PagedResult<OrderDto>>("/api/orders", CyberCafeApiFactory.Json))!.Items);
+
+        // record có List bên trong so sánh theo tham chiếu → so bằng JSON (từng trường, kể cả Items)
+        string expected = JsonSerializer.Serialize(written, CyberCafeApiFactory.Json);
+        Assert.Equal(expected, JsonSerializer.Serialize(byId, CyberCafeApiFactory.Json));
+        Assert.Equal(expected, JsonSerializer.Serialize(mine, CyberCafeApiFactory.Json));
+        Assert.Equal(expected, JsonSerializer.Serialize(board, CyberCafeApiFactory.Json));
+    }
+
+    // Kiểm tra (b50 · domain event): 1 lần đặt + 2 lần đổi trạng thái → đúng 1 OrderPlaced và 2 OrderStatusChanged
+    // được phát SAU khi lưu, mang dữ liệu đã lưu (Id thật, trạng thái mới).
+    [Fact]
+    public async Task DomainEvents_ArePublishedOncePerChange_AfterSave()
+    {
+        OrderDto order = await this._client.PlaceAsync();
+
+        await this.PutStatusAsync(order.Id, "Preparing");
+        await this.PutStatusAsync(order.Id, "Ready");
+
+        Assert.Equal(order.Id, Assert.Single(this._factory.Notifier.Placed).Id);
+        Assert.Equal([OrderStatus.Preparing, OrderStatus.Ready], this._factory.Notifier.StatusChanged.Select(o => o.Status).ToArray());
     }
 
     // Kiểm tra: danh sách mặc định chỉ gồm đơn đang chạy (đơn đã hủy không hiện ở quầy barista).

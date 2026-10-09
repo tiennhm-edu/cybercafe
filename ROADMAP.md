@@ -18,7 +18,7 @@ Mỗi tag = 1 commit trên `main`, đã `dotnet build` + `dotnet test` xanh. Gi�
 | `b40-api-efcore` | 32–41 | `CyberCafe.Api` (controllers) + EF Core SQL Server (Docker) + SignalR quầy barista; Web gọi API bằng typed HttpClient | ✅ done |
 | `b47-auth-cache` | 42–47 | JWT + BCrypt + refresh token, phân quyền theo vai trò, middleware, filter, Redis cache, rate limiting | ✅ done |
 | `b48-clean-arch` | 48 | Domain / Application / Infrastructure / Api, architecture test, không đổi hành vi | ✅ done |
-| `b53-ddd-cqrs` | 49–53 | Order aggregate, value object, domain event, CQRS | ⏳ planned |
+| `b53-ddd-cqrs` | 49–53 | Order aggregate, value object, domain event, CQRS (dispatcher tự viết), pipeline behavior, read model | ✅ done |
 | `b55-microservice` | 54–55 | .NET Aspire AppHost, YARP gateway, tách Menu/Order/Payment service, message broker | ⏳ planned |
 
 > Thứ tự commit = thứ tự trong bảng. Mỗi tag gom trọn 1 chặng, không chồng buổi: 32–41 → 42–47 → 48 → 49–53 → 54–55.
@@ -100,18 +100,20 @@ Mục tiêu: tái cấu trúc theo Clean Architecture, không đổi hành vi.
 
 Kịch bản: [docs/sessions/b48.md](docs/sessions/b48.md)
 
-## ⏳ `b53-ddd-cqrs` — Buổi 49–53
+## ✅ `b53-ddd-cqrs` — Buổi 49–53
 
-Mục tiêu: mô hình hóa nghiệp vụ đơn hàng chặt chẽ + tách đọc/ghi.
+Mục tiêu: mô hình hóa nghiệp vụ đơn hàng chặt chẽ + tách đọc/ghi. Lược đồ database **không đổi** (không migration mới), hợp đồng HTTP giữ nguyên — Web không sửa.
 
-- [ ] `Order` thành **aggregate root**: chỉ thay đổi qua method (`AddItem`, `ApplyDiscount`, `Pay`, `StartPreparing`, `MarkReady`, `Complete`, `Cancel`), bảo vệ invariant — thay cho `OrderStatusFlow` dạng bảng
-- [ ] Value objects: `Money`, `PhoneNumber`, `OrderId`; `DrinkSize` + giá thành value object
-- [ ] Domain events: `OrderPlaced`, `OrderPaid`, `OrderReady` → handler gửi SignalR / cộng điểm (thay `IOrderNotifier` gọi tay trong controller)
-- [ ] CQRS với MediatR (hoặc tự viết dispatcher): `PlaceOrderCommand`, `ChangeOrderStatusCommand`, `GetMenuQuery`, `GetOrderByIdQuery`
-- [ ] Pipeline behavior: validation, logging, transaction
-- [ ] Read model tối ưu cho màn hình barista (projection / Dapper)
-- [ ] Test: unit test invariant aggregate, handler test
-- [ ] `docs/sessions/b49.md` … `b53.md`
+- [x] `Order` thành **aggregate root** (`AggregateRoot`, `DomainException` → 409): tạo bằng `Order.Create`, chỉ thay đổi qua method (`AddItem`, `ApplyDiscount`, `Pay`, `StartPreparing`, `MarkReady`, `Complete`, `Cancel`), bảo vệ invariant (không sửa sau thanh toán, không trả 2 lần, chưa trả chưa pha, khách chỉ hủy khi Pending); `OrderStatusFlow` giữ làm bảng luật dùng chung với Web; chủ đơn thành `Order.OwnerId` (cột cũ `UserId`)
+- [x] Value objects: `Money` (value converter EF), `OrderCode` (`CC-0007` 2 chiều), `PhoneNumber` (1 nguồn luật SĐT)
+- [x] Domain events: `OrderPlaced`, `OrderPaid`, `OrderStatusChanged`, phát **sau khi lưu / sau commit** (override `SaveChangesAsync`); handler gửi SignalR + log thanh toán (thay `IOrderNotifier` gọi tay)
+- [x] CQRS với **dispatcher tự viết** (`ISender`, `ICommand`/`IQuery`, handler; MediatR 13+ là thương mại — [ADR 0003](docs/adr/0003-cqrs-dispatcher-tu-viet.md)): `PlaceOrderCommand`, `ChangeOrderStatusCommand`, `CancelOrderCommand`, `GetMenuQuery`, `GetProductByIdQuery`, `GetOrderByIdQuery`, `GetMyOrdersQuery`, `GetBaristaBoardQuery`
+- [x] Pipeline behavior: logging, validation (FluentValidation, Apache-2.0), transaction (chỉ command, event chờ commit)
+- [x] Read model cho màn hình barista / chi tiết đơn: projection + `AsNoTracking`, IDOR trong `WHERE` (không thêm Dapper — giữ ít gói)
+- [x] Test: invariant aggregate + value object (`CyberCafe.Tests`), handler + pipeline + publisher (`CyberCafe.Application.Tests` mới), read model khớp write model (Api.Tests), luật DDD/CQRS (ArchitectureTests)
+- [x] `docs/sessions/b49.md` … `b53.md`
+
+Kịch bản: [b49](docs/sessions/b49.md) · [b50](docs/sessions/b50.md) · [b51](docs/sessions/b51.md) · [b52](docs/sessions/b52.md) · [b53](docs/sessions/b53.md)
 
 ## ⏳ `b55-microservice` — Buổi 54–55
 

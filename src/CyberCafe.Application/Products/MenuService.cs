@@ -1,34 +1,25 @@
 // ============================================================================
-// MenuService.cs — use case quản lý thực đơn (Buổi 48 · Clean Architecture).
+// MenuService.cs — use case GHI thực đơn (Buổi 48 · Clean Architecture; Buổi 51–53: phần đọc → Queries/MenuQueries.cs).
 // Trước (b47) toàn bộ logic này nằm trong ProductsController: LINQ trên DbContext, cache, kiểm tra "đã bán".
 // Bây giờ controller chỉ còn: nhận HTTP → gọi MenuService → trả HTTP. MenuService thì:
 //   - Không biết HTTP (không IActionResult, không StatusCodes) → lỗi = exception có nghĩa (AppExceptions.cs).
 //   - Không biết EF Core / Redis → chỉ dùng port: IProductRepository, IUnitOfWork, IMenuCache.
 //   → Unit test được bằng bản giả (fake) của 3 interface, không cần database.
 // Hành vi GIỮ NGUYÊN 100% so với b47 (test tích hợp cũ chạy lại không sửa dòng nào ngoài using).
+// Buổi 51–53: GetPage/GetById chuyển thành GetMenuQuery/GetProductByIdQuery (đi qua dispatcher + cache).
+//   Thêm/sửa/xóa món là CRUD đơn giản → giữ service này, không cần command (ADR 0003: CQRS có chọn lọc).
 // ============================================================================
-using CyberCafe.Application.Caching;
 using CyberCafe.Application.Common.Exceptions;
 using CyberCafe.Application.Common.Interfaces;
-using CyberCafe.Contracts.Common;
 using CyberCafe.Contracts.Products;
 using CyberCafe.Domain.Products;
 
 namespace CyberCafe.Application.Products;
 
 // 👉 Bước 7 (b48.md)
-/// <summary>Đọc (qua cache) và ghi thực đơn.</summary>
-public class MenuService(IProductRepository products, IUnitOfWork unitOfWork, IMenuCache menuCache)
+/// <summary>Thêm / sửa / xóa thực đơn (cache được filter [InvalidateMenuCache] ở Api vô hiệu hóa sau khi ghi).</summary>
+public class MenuService(IProductRepository products, IUnitOfWork unitOfWork)
 {
-    /// <summary>1 trang thực đơn — cache-aside, key = query string đã chuẩn hóa.</summary>
-    public Task<CacheResult<PagedResult<ProductDto>>> GetPageAsync(ProductQuery query, CancellationToken ct = default) =>
-        // ?page=1&type=tea và ?type=tea&page=1 dùng CHUNG 1 key nhờ ToQueryString() có thứ tự cố định
-        menuCache.GetOrCreateAsync($"products?{query.ToQueryString()}", token => products.GetPageAsync(query, token), ct);
-
-    /// <summary>Chi tiết 1 món (Value = null nếu không có — null không được cache).</summary>
-    public Task<CacheResult<ProductDto?>> GetByIdAsync(int id, CancellationToken ct = default) =>
-        menuCache.GetOrCreateAsync($"product:{id}", token => products.GetDtoAsync(id, token), ct);
-
     /// <summary>Thêm món. Domain validate tên/giá/loại → ArgumentException (→ 400).</summary>
     public async Task<ProductDto> CreateAsync(ProductRequest request, CancellationToken ct = default)
     {
@@ -75,6 +66,6 @@ public class MenuService(IProductRepository products, IUnitOfWork unitOfWork, IM
         await unitOfWork.SaveChangesAsync(ct); // DELETE FROM Products WHERE Id = @p0
     }
 
-    // ⚠️ Lỗi hay gặp: gọi menuCache.InvalidateAsync() trong từng method ghi ở đây VÀ giữ filter
-    //    [InvalidateMenuCache] ở controller → xóa cache 2 lần. b48 giữ nguyên filter của b47 (không đổi hành vi).
+    // ⚠️ Lỗi hay gặp: gọi IMenuCache.InvalidateAsync() trong từng method ghi ở đây VÀ giữ filter
+    //    [InvalidateMenuCache] ở controller → xóa cache 2 lần. b48–b53 giữ nguyên filter của b47.
 }

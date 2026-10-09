@@ -1,9 +1,11 @@
 // ============================================================================
-// Cart.cs — giỏ hàng thuần C# (Buổi 24–31 · Domain model, Encapsulation).
+// Cart.cs — giỏ hàng thuần C# (Buổi 24–31 · Domain model, Encapsulation; Buổi 49: ToOrder đi qua aggregate).
 // Vì sao để Cart trong Domain chứ không viết thẳng trong component Blazor?
 //   - Logic tính tiền (gộp dòng, phụ thu size, giảm giá) test được bằng xUnit ngay.
 //   - Không phụ thuộc UI: sau này Web API / app mobile dùng lại nguyên class này.
 // Phần "báo cho UI biết giỏ đã đổi" là việc của CartState (project Web).
+// Buổi 49: Cart là "bản nháp" phía giao diện, KHÔNG phải aggregate (không lưu DB, không có invariant thanh toán).
+//   API đặt đơn dựng Order trực tiếp bằng Order.Create + AddItem; Cart.ToOrder giữ lại cho Web/unit test.
 // ============================================================================
 using CyberCafe.Domain.Discounts;
 using CyberCafe.Domain.People;
@@ -35,7 +37,7 @@ public class Cart
 
     // Tổng tiền gốc (đã tính phụ thu size)
     /// <summary>Tổng tiền trước giảm giá. Computed property: luôn tính lại, không lưu → không bao giờ "lệch".</summary>
-    public decimal Subtotal => this._items.Sum(x => x.TotalPrice);
+    public decimal Subtotal => this._items.Sum(x => x.TotalPrice.Amount); // TotalPrice là Money (b50) → lấy .Amount
 
     /// <summary>Số tiền được giảm; <c>?.</c> và <c>??</c>: không có Discount thì bằng 0.</summary>
     public decimal DiscountAmount => this.Discount?.GetDiscountAmount(this.Subtotal) ?? 0;
@@ -119,7 +121,11 @@ public class Cart
         this.Discount = null;
     }
 
-    /// <summary>Chốt giỏ thành <see cref="Order"/> (Order tự sao chép các dòng).</summary>
+    // 👉 Bước 5 (b49.md)
+    /// <summary>
+    /// Chốt giỏ thành <see cref="Order"/> CHƯA thanh toán: Order.Create rồi AddItem từng dòng (đơn tự tạo
+    /// OrderItem MỚI — sửa giỏ sau đó không làm đổi đơn), ApplyDiscount nếu có. Gọi order.Pay(...) để chốt.
+    /// </summary>
     /// <exception cref="InvalidOperationException">Giỏ trống.</exception>
     public Order ToOrder(Customer customer, string? note = null)
     {
@@ -128,6 +134,17 @@ public class Cart
             throw new InvalidOperationException("Giỏ hàng đang trống");
         }
 
-        return new Order(customer, this._items, this.Discount, note);
+        Order order = Order.Create(customer, note);
+        foreach (OrderItem item in this._items)
+        {
+            order.AddItem(item.Product, item.Size, item.Quantity); // invariant của aggregate vẫn được kiểm tra
+        }
+
+        if (this.Discount is not null)
+        {
+            order.ApplyDiscount(this.Discount);
+        }
+
+        return order;
     }
 }

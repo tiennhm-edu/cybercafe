@@ -43,7 +43,7 @@ builder.Services.AddControllers()
 builder.Services.AddOpenApi(o => o.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
 
 // 👉 Bước 10 (b48.md): mỗi tầng tự đăng ký service của mình.
-//   AddApplication():    use case (MenuService, OrderService).
+//   AddApplication():    use case — b48: MenuService/OrderService; b51–53: dispatcher ISender, handler, validator, behavior.
 //   AddInfrastructure(): DbContext (Scoped) + repository + IUnitOfWork, JwtOptions (fail fast), TokenService,
 //                        BCrypt, AuthService, cache Redis/RAM, báo cáo doanh thu — trước nằm hết ở file này (b47).
 builder.Services.AddApplication();

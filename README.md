@@ -91,7 +91,7 @@ Gợi ý demo (từ tag `b47-auth-cache`): tab 1 đăng nhập `barista@…` →
 
 ---
 
-## Cấu trúc thư mục (tại `b48-clean-arch`)
+## Cấu trúc thư mục (tại `b53-ddd-cqrs`)
 
 Sơ đồ tầng + luật phụ thuộc: [docs/architecture.md](docs/architecture.md).
 
@@ -106,20 +106,22 @@ cybercafe/
 ├── .github/workflows/ci.yml     # CI: restore → build → test
 ├── src/
 │   ├── CyberCafe.Domain/        # C# thuần, không phụ thuộc web/EF
+│   │   ├── Common/              # (b49–50) AggregateRoot, DomainException, IDomainEvent, Money, PhoneNumber
 │   │   ├── Products/            # Product → Drink → Coffee/Tea; Cake; DrinkSize
-│   │   ├── Orders/              # Cart, Order, OrderItem, OrderStatus, OrderStatusFlow
+│   │   ├── Orders/              # aggregate Order, OrderItem, OrderCode, Events/, Cart, OrderStatus, OrderStatusFlow
 │   │   ├── Discounts/           # Discount → Member/Voucher; DiscountCatalog
 │   │   ├── Payments/            # Payment → Cash/Card/Momo; PaymentFactory
 │   │   └── People/              # Person → Customer / Employee
 │   ├── CyberCafe.Contracts/     # DTO/request dùng chung Api ↔ Web, tên sự kiện SignalR
 │   ├── CyberCafe.Application/   # (b48) use case + port — KHÔNG biết EF Core / ASP.NET Core
-│   │   ├── Common/              # CurrentUser, exception nghiệp vụ (NotFound/Validation/Conflict), IUnitOfWork
-│   │   ├── Products/            # MenuService, IProductRepository, ProductMapping
-│   │   ├── Orders/              # OrderService, IOrderRepository, IOrderNotifier, OrderMapping
+│   │   ├── Common/              # CurrentUser, exception nghiệp vụ, IUnitOfWork; (b51–52) Messaging/ (ISender…), Behaviors/
+│   │   ├── Products/            # MenuService (ghi), Queries/ (GetMenu…), IProductRepository, ProductMapping
+│   │   ├── Orders/              # Commands/, Queries/ (+ IOrderReadStore), EventHandlers/, IOrderRepository, IOrderNotifier
 │   │   ├── Auth/ Caching/ Reports/  # IAuthService, IMenuCache, IRevenueReportService
 │   │   └── DependencyInjection.cs   # AddApplication()
 │   ├── CyberCafe.Infrastructure/ # (b48) cài đặt các port
-│   │   ├── Persistence/         # CyberCafeDbContext (+IUnitOfWork), Configurations/, Migrations/, Repositories/, MenuSeed
+│   │   ├── Persistence/         # CyberCafeDbContext (+IUnitOfWork, phát domain event), Configurations/, Migrations/,
+│   │   │                        #   Repositories/ (ghi), ReadModels/ (đọc — b53), MenuSeed
 │   │   ├── Identity/            # User, RefreshToken, JWT TokenService, BCrypt, AuthService, DevAccountSeeder
 │   │   ├── Caching/             # MenuCache (Redis / IDistributedCache)
 │   │   ├── Realtime/            # SignalROrderNotifier<THub>, IOrderClient
@@ -127,7 +129,7 @@ cybercafe/
 │   │   └── DependencyInjection.cs   # AddInfrastructure(configuration), AddOrderNotifier<THub>()
 │   ├── CyberCafe.Api/           # ASP.NET Core Web API — controller mỏng + composition root
 │   │   ├── Auth/                # Policies, ToCurrentUser(), Bearer cho OpenAPI
-│   │   ├── Controllers/         # Auth, Products, Orders, Reports
+│   │   ├── Controllers/         # Auth, Products, Orders (gửi command/query qua ISender), Reports
 │   │   ├── Errors/              # DomainExceptionHandler (exception → ProblemDetails)
 │   │   ├── Filters/             # [InvalidateMenuCache]
 │   │   ├── Middleware/          # CorrelationId, RequestLogging
@@ -141,11 +143,12 @@ cybercafe/
 │       └── State/               # CartState (scoped + event OnChange)
 ├── tests/
 │   ├── CyberCafe.Tests/         # xUnit: Domain + Web (typed client với HttpMessageHandler giả)
+│   ├── CyberCafe.Application.Tests/ # (b53) handler, pipeline behavior, dispatcher — port giả, không DB
 │   ├── CyberCafe.Api.Tests/     # WebApplicationFactory + EF InMemory + SignalR qua TestServer
-│   └── CyberCafe.ArchitectureTests/ # (b48) luật phụ thuộc giữa các tầng (Reflection)
+│   └── CyberCafe.ArchitectureTests/ # (b48) luật phụ thuộc giữa các tầng; (b53) luật DDD/CQRS (Reflection)
 ├── docs/architecture.md         # sơ đồ tầng (Mermaid), đặt code mới ở đâu
 ├── docs/sessions/               # kịch bản live-code cho từng chặng
-├── docs/adr/                    # quyết định kiến trúc (ADR 0001, 0002...)
+├── docs/adr/                    # quyết định kiến trúc (ADR 0001 DbContext, 0002 Clean Architecture, 0003 DDD + CQRS)
 ├── ROADMAP.md                   # kế hoạch các tag tiếp theo
 └── README.md
 ```
@@ -161,7 +164,7 @@ cybercafe/
 | `b40-api-efcore` | 32–41 | `CyberCafe.Api` + typed `HttpClient`, EF Core SQL Server (Docker, TPH, migration, stored procedure), SignalR quầy barista | ✅ |
 | `b47-auth-cache` | 42–47 | JWT + BCrypt + refresh token, phân quyền, middleware, filter, Redis cache, rate limiting | ✅ |
 | `b48-clean-arch` | 48 | Clean Architecture: Domain / Application / Infrastructure / Api, port + adapter, architecture test | ✅ |
-| `b53-ddd-cqrs` | 49–53 | Order aggregate, domain event, CQRS | ⏳ |
+| `b53-ddd-cqrs` | 49–53 | Order aggregate, value object, domain event, CQRS (dispatcher tự viết), pipeline behavior, read model | ✅ |
 | `b55-microservice` | 54–55 | .NET Aspire, YARP gateway, Order/Payment/Menu services, message broker | ⏳ |
 
 Chi tiết từng mốc: [ROADMAP.md](ROADMAP.md). Kịch bản giảng: [docs/sessions/](docs/sessions/).

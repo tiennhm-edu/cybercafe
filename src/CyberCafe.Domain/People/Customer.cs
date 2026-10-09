@@ -1,6 +1,8 @@
 // ============================================================================
-// Customer.cs — khách hàng (Buổi 24–31 · Inheritance, constructor overloading).
+// Customer.cs — khách hàng (Buổi 24–31 · Inheritance, constructor overloading; Buổi 50: overload nhận PhoneNumber).
 // ============================================================================
+using CyberCafe.Domain.Common;
+
 namespace CyberCafe.Domain.People;
 
 /// <summary>
@@ -30,6 +32,12 @@ public class Customer : Person
 
     /// <summary>Khách mới, 0 điểm.</summary>
     public Customer(string fullName, string phoneNumber) : base(fullName, phoneNumber)
+    {
+    }
+
+    // Buổi 50: nhận value object → nơi gọi đã cầm SĐT "chắc chắn hợp lệ" (PlaceOrderCommandHandler dùng overload này)
+    /// <summary>Khách mới, 0 điểm, SĐT đã là <see cref="PhoneNumber"/>.</summary>
+    public Customer(string fullName, PhoneNumber phoneNumber) : base(fullName, phoneNumber.Value)
     {
     }
 
