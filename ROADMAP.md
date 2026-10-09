@@ -2,6 +2,15 @@
 
 Mỗi tag = 1 commit trên `main`, đã `dotnet build` + `dotnet test` xanh. Giảng viên hoàn thiện tag **trước** buổi học tương ứng; trong giờ học live-code lại các bước chính theo `docs/sessions/bXX.md`.
 
+> **Demo từng buổi nằm ở lab, không nằm ở đây.** Mỗi khái niệm được dạy trước trong lab (1 commit + 1 tag mỗi buổi):
+>
+> | Buổi | Lab | Tag |
+> |------|-----|-----|
+> | 23–34 | `dotnet-blazor-lab` (Blazor Server, binding, component, form, lifecycle, JS interop, state, HttpClient, SignalR, JWT) | `b23` … `b34` |
+> | 35–47 | `dotnet-webapi-lab` (CRUD API, SQL Server, EF Core, Docker, middleware, filter, cache, Repository/UoW, JWT, FE Blazor) | `b35` … `b47` |
+>
+> CyberCafe là **dự án tích hợp**: sau mỗi chặng, lớp áp dụng lại những gì vừa học trong lab vào một sản phẩm hoàn chỉnh, nên các tag ở đây gom nhiều buổi.
+
 | Tag | Buổi | Nội dung | Trạng thái |
 |-----|------|----------|------------|
 | `b23-blazor-start` | 23 | Blazor Server buổi 1: Blazor Web App, layout, routing, Razor syntax, DI `MenuService` | ✅ done |
