@@ -1,13 +1,15 @@
 @* ==========================================================================
-   Checkout.razor — trang Đặt hàng /checkout (Buổi 24–31 · Forms & validation).
+   Checkout.razor — trang Đặt hàng /checkout (Buổi 24–31 · Forms & validation;
+   Buổi 32–35 · gửi đơn lên API bằng OrderApiClient).
    Minh họa: EditForm + DataAnnotationsValidator + các Input* component,
-   OnValidSubmit, NavigationManager để chuyển trang sau khi đặt thành công.
-   Luồng: form hợp lệ → Cart.ToOrder → Order.Checkout(Payment) → OrderStore.Add
+   OnValidSubmit (async), NavigationManager để chuyển trang sau khi đặt thành công.
+   Luồng: form hợp lệ → CheckoutModel.ToRequest(giỏ, mã giảm giá) → POST /api/orders
+          (API tự tính tiền + lưu SQL Server + báo barista qua SignalR)
           → CartState.Clear → chuyển tới /orders/{id}.
    ========================================================================== *@
 @page "/checkout"
 @inject CartState CartState
-@inject OrderStore OrderStore
+@inject OrderApiClient OrderApi
 @* NavigationManager: service có sẵn của Blazor để đọc URL hiện tại và chuyển trang bằng code *@
 @inject NavigationManager Navigation
 
@@ -25,9 +27,9 @@ else
         <div class="col-lg-7">
             @* EditForm: quản lý EditContext; DataAnnotationsValidator đọc [Required], [RegularExpression]... *@
             @* Model="_model": object chứa dữ liệu form (CheckoutModel).
-               OnValidSubmit: chỉ gọi PlaceOrder khi KHÔNG còn lỗi; có lỗi thì form hiện lỗi và dừng.
+               OnValidSubmit: chỉ gọi PlaceOrderAsync khi KHÔNG còn lỗi; có lỗi thì form hiện lỗi và dừng.
                FormName: tên định danh form, bắt buộc khi form được submit ở chế độ render tĩnh (SSR). *@
-            <EditForm Model="_model" OnValidSubmit="PlaceOrder" FormName="checkout">
+            <EditForm Model="_model" OnValidSubmit="PlaceOrderAsync" FormName="checkout">
                 @* ⚠️ Lỗi hay gặp: quên <DataAnnotationsValidator /> → các attribute [Required]... bị bỏ qua, form luôn "hợp lệ". *@
                 <DataAnnotationsValidator />
                 @* ValidationSummary: danh sách TẤT CẢ lỗi ở đầu form *@
@@ -117,29 +119,31 @@ else
     private string? _error;
     private bool _submitting;
 
-    // Chỉ chạy khi DataAnnotations (và IValidatableObject) đều hợp lệ
-    private void PlaceOrder()
+    // Chỉ chạy khi DataAnnotations (và IValidatableObject) đều hợp lệ.
+    // async Task: EditForm chờ hàm xong; trong lúc chờ API, nút bị disabled (_submitting).
+    private async Task PlaceOrderAsync()
     {
         _submitting = true;
+        _error = null;
         try
         {
-            // Chuyển dữ liệu form (có thể "sai tạm thời") sang domain object (luôn hợp lệ)
-            Customer customer = new(_model.FullName, _model.PhoneNumber);
-            Order order = CartState.Cart.ToOrder(customer, _model.Note);
-            order.Checkout(_model.CreatePayment(order.FinalAmount));
+            // Form (có thể "sai tạm thời") → request (chỉ Id món, size, SL, MÃ giảm giá). API tự tính tiền.
+            PlaceOrderRequest request = _model.ToRequest(CartState.Cart, CartState.DiscountCode);
+            OrderDto order = await OrderApi.PlaceOrderAsync(request);
 
-            // Lưu đơn TRƯỚC (để có Id), rồi mới làm trống giỏ
-            OrderStore.Add(order);
+            // Chỉ làm trống giỏ SAU KHI API lưu thành công — lỗi mạng thì khách không mất giỏ
             CartState.Clear();
 
-            // Chuyển sang trang xác nhận; Id đi theo URL → OrderConfirmation đọc qua route parameter
+            // Id do SQL Server sinh → đi theo URL → OrderConfirmation đọc qua route parameter
             Navigation.NavigateTo($"orders/{order.Id}");
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        catch (ApiException ex)
         {
-            // Domain từ chối (vd: dữ liệu không hợp lệ) → báo lỗi, không crash circuit
-            // "when (...)": exception filter — chỉ bắt 2 loại lỗi nghiệp vụ, lỗi khác vẫn ném tiếp
+            // 400 (dữ liệu sai), 409 (món vừa hết), 503 (API tắt)... → hiện thông báo, không crash circuit
             _error = ex.Message;
+        }
+        finally
+        {
             _submitting = false;
         }
     }

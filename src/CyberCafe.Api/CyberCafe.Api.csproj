@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    CyberCafe.Api (Buổi 32–41): ASP.NET Core Web API (controllers) + EF Core SQL Server + SignalR.
+    Version package nằm trong Directory.Packages.props (Central Package Management).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- user-secrets: dotnet user-secrets set "ConnectionStrings:CyberCafe" "..." (thay cho appsettings khi làm thật) -->
+    <UserSecretsId>cybercafe-api</UserSecretsId>
+    <!-- Sinh file XML từ /// <summary> → OpenAPI (Scalar) hiện mô tả tiếng Việt cho từng endpoint -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591: thiếu /// trên member public. Không bắt buộc với migration do EF sinh ra. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <!-- Design: chỉ dùng lúc chạy lệnh dotnet ef (migrations), không đóng gói vào app -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CyberCafe.Domain\CyberCafe.Domain.csproj" />
+    <ProjectReference Include="..\CyberCafe.Contracts\CyberCafe.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

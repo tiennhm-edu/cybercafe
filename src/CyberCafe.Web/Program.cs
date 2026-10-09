@@ -1,6 +1,7 @@
 // ============================================================================
 // Program.cs — điểm khởi động của ứng dụng (Buổi 23 · Hosting, DI, middleware;
-//              Buổi 24–31 đăng ký thêm DiscountService, OrderStore, CartState).
+//              Buổi 24–31 đăng ký thêm CartState;
+//              Buổi 32–41: dữ liệu đi qua CyberCafe.Api bằng typed HttpClient + SignalR).
 // Gồm 2 phần:
 //   1) builder.Services...  : ĐĂNG KÝ service vào DI container (trước Build()).
 //   2) app.Use.../app.Map... : cấu hình pipeline xử lý request (sau Build()).
@@ -15,16 +16,31 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Dependency Injection: dữ liệu menu dùng chung cho toàn app → Singleton
 // 3 vòng đời (lifetime) cần nhớ:
 //   - Singleton: 1 instance duy nhất cho cả app, mọi người dùng dùng chung.
 //   - Scoped   : Blazor Server → 1 instance cho mỗi circuit (mỗi tab trình duyệt).
 //   - Transient: tạo mới mỗi lần được inject.
-builder.Services.AddSingleton<MenuService>();
-builder.Services.AddSingleton<DiscountService>();
 
-// Đơn hàng: kho chung cho mọi người dùng → Singleton (buổi 41 thay bằng EF Core)
-builder.Services.AddSingleton<OrderStore>();
+// 👉 Bước 10 (b40.md): địa chỉ Api đọc từ cấu hình (appsettings.json → "ApiBaseUrl"), không viết cứng trong code.
+// ⚠️ Lỗi hay gặp: thiếu dấu "/" cuối BaseAddress → "api/products" ghép thành ".../5180api/products".
+Uri apiBaseUrl = new((builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5180").TrimEnd('/') + "/");
+
+// Buổi 23–31: MenuService + OrderStore (in-memory, Singleton) → nay thay bằng TYPED HTTPCLIENT.
+// AddHttpClient<T>: IHttpClientFactory tạo HttpClient cho T (đăng ký Transient), tái sử dụng HttpMessageHandler
+// bên dưới → không cạn socket, tự làm mới DNS. Component chỉ cần @inject MenuApiClient.
+builder.Services.AddHttpClient<MenuApiClient>(client =>
+{
+    client.BaseAddress = apiBaseUrl;
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+builder.Services.AddHttpClient<OrderApiClient>(client =>
+{
+    client.BaseAddress = apiBaseUrl;
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
+// Buổi 33–34: nhà máy tạo HubConnection tới Api/hubs/orders (Singleton vì chỉ giữ URL, không giữ kết nối)
+builder.Services.AddSingleton(new OrderHubConnectionFactory(apiBaseUrl));
 
 // Giỏ hàng: mỗi circuit (tab trình duyệt) 1 giỏ riêng → Scoped
 // Mọi component trong CÙNG 1 tab (Menu, CartSummary, CartPage, Checkout) nhận CÙNG 1 CartState

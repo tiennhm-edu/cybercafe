@@ -15,15 +15,13 @@ Mỗi tag = 1 commit trên `main`, đã `dotnet build` + `dotnet test` xanh. Gi�
 |-----|------|----------|------------|
 | `b23-blazor-start` | 23 | Blazor Server buổi 1: Blazor Web App, layout, routing, Razor syntax, DI `MenuService` | ✅ done |
 | `b28-cart-state` | 24–31 | Binding, component, parameter, EventCallback, form + validation, lifecycle, state giỏ hàng, domain OOP | ✅ done |
-| `b32-webapi-crud` | 32–35 | Tách `CyberCafe.Api`, typed HttpClient service, CRUD thực đơn | ⏳ planned |
-| `b34-signalr` | 33–34 | SignalR Hub: đơn mới realtime cho quầy barista, phân quyền | ⏳ planned |
-| `b41-efcore` | 36–41 | SQL Server Docker, EF Core Code First, migrations, LINQ, stored procedure | ⏳ planned |
-| `b47-auth-filters` | 42–47 | JWT + BCrypt, middleware, filters, caching Redis, Repository + UoW | ⏳ planned |
+| `b40-api-efcore` | 32–41 | `CyberCafe.Api` (controllers) + EF Core SQL Server (Docker) + SignalR quầy barista; Web gọi API bằng typed HttpClient | ✅ done |
+| `b47-auth-cache` | 42–47 | JWT + BCrypt + refresh token, phân quyền theo vai trò, middleware, filter, Redis cache, rate limiting | ⏳ planned |
 | `b48-clean-arch` | 48 | Domain / Application / Infrastructure / Api | ⏳ planned |
-| `b53-ddd-cqrs` | 49–53 | Order aggregate, CQRS | ⏳ planned |
-| `b55-microservice` | 51–55 | .NET Aspire AppHost, YARP gateway, Order/Payment/Menu services, Kafka hoặc RabbitMQ | ⏳ planned |
+| `b53-ddd-cqrs` | 49–53 | Order aggregate, value object, domain event, CQRS | ⏳ planned |
+| `b55-microservice` | 54–55 | .NET Aspire AppHost, YARP gateway, tách Menu/Order/Payment service, message broker | ⏳ planned |
 
-> Ghi chú về thứ tự: `b34-signalr` có số buổi nằm trong khoảng 32–35. Thứ tự **commit** dự kiến: `b32-webapi-crud` → `b34-signalr` → `b41-efcore` → ... (b34 xây trên Api của b32).
+> Thứ tự commit = thứ tự trong bảng. Mỗi tag gom trọn 1 chặng, không chồng buổi: 32–41 → 42–47 → 48 → 49–53 → 54–55.
 
 ---
 
@@ -50,69 +48,40 @@ Kịch bản: [docs/sessions/b28.md](docs/sessions/b28.md)
 
 ---
 
-## ⏳ `b32-webapi-crud` — Buổi 32–35
+## ✅ `b40-api-efcore` — Buổi 32–41
 
-Mục tiêu: dữ liệu menu đi qua HTTP API thay vì nằm trong Web.
+Mục tiêu: dữ liệu đi qua HTTP API và nằm bền vững trong SQL Server; quầy barista nhận đơn realtime.
 
-- [ ] `dotnet new webapi -n CyberCafe.Api -o src/CyberCafe.Api --use-controllers`; add vào `.slnx`, reference `CyberCafe.Domain`
-- [ ] DTO: `ProductDto`, `CreateProductRequest`, `UpdateProductRequest` (record) + mapping Product ↔ DTO (polymorphic: trường `Type` = coffee/tea/cake)
-- [ ] `ProductsController`: `GET /api/products`, `GET /api/products/{id}`, `POST`, `PUT`, `DELETE`; trả `201 Created` + `Location`, `404`, `400 ValidationProblem`
-- [ ] `IMenuRepository` + `InMemoryMenuRepository` (singleton) — chuẩn bị thay bằng EF ở b41
-- [ ] OpenAPI (`AddOpenApi` + Scalar UI) để thử API
-- [ ] Web: `MenuApiClient` typed HttpClient (`AddHttpClient<MenuApiClient>(c => c.BaseAddress = ...)`), thay `MenuService` trong trang Menu
-- [ ] Trang admin `/admin/menu`: bảng + form thêm/sửa (`EditForm`), nút xóa có confirm
-- [ ] `OrdersController` `POST /api/orders` (Checkout gọi API thay vì `OrderStore` trực tiếp)
-- [ ] Xử lý lỗi gọi API ở Web (try/catch `HttpRequestException`, hiện thông báo)
-- [ ] Test: `WebApplicationFactory<Program>` integration test cho `ProductsController` (GET list, POST → 201, GET id không tồn tại → 404)
-- [ ] Chạy song song 2 project: launch profile / hướng dẫn README; CORS nếu cần
-- [ ] `docs/sessions/b32.md`
+- [x] `src/CyberCafe.Api` (controllers) + `src/CyberCafe.Contracts` (DTO/request dùng chung Api ↔ Web); Central Package Management (`Directory.Packages.props`, cùng version với lab)
+- [x] `ProductsController`: GET (lọc/tìm/sắp xếp/phân trang), GET id, POST `201 + Location`, PUT, DELETE (`409` nếu món đã bán); `404` + `ValidationProblem`
+- [x] `OrdersController`: POST đặt hàng (server tự tính tiền, tra mã giảm giá), GET id, GET danh sách đơn đang chạy, PUT status theo `OrderStatusFlow` (Pending → Preparing → Ready → Completed, hủy khi chưa Ready) → `409` khi sai luồng
+- [x] EF Core SQL Server: `CyberCafeDbContext`, `IEntityTypeConfiguration`, **TPH** cho Product (và Payment, Discount), owned type `Customer`, shadow key/FK, enum → string, `decimal` precision, constructor private cho EF, chốt `UnitPrice` trên `OrderItem`
+- [x] Migration `InitialCreate` + seed `HasData`; migration viết tay `AddDailyRevenueProcedure` tạo `dbo.usp_DailyRevenue`, gọi bằng `Database.SqlQuery` (tham số hóa); InMemory dùng nhánh LINQ `GroupBy`
+- [x] `AsNoTracking`, projection sang DTO, `Include/ThenInclude` cho đơn hàng
+- [x] `docker-compose.yml` SQL Server 2022 (healthcheck, volume, cổng 1434), `.env.example`, `dotnet-tools.json` (dotnet-ef)
+- [x] OpenAPI + Scalar (`/scalar/v1`)
+- [x] SignalR `OrderHub`: group `baristas` + `order-{id}`; `IOrderNotifier` bọc `IHubContext`
+- [x] Web: `MenuApiClient`, `OrderApiClient` (typed HttpClient, `ApiException`), trang `/barista` (HubConnection, `WithAutomaticReconnect`, `IAsyncDisposable`), `/orders/{id}` cập nhật trạng thái trực tiếp, `/admin/menu` CRUD + phân trang
+- [x] Cổng cố định: Api `5180`, Web `5170`; `ApiBaseUrl` trong `appsettings.json`
+- [x] Test: `WebApplicationFactory` + EF InMemory (CRUD, paging, đặt hàng, luồng trạng thái 400/404/409, báo cáo), hub thật qua TestServer, migration up-to-date; unit test typed client bằng `HttpMessageHandler` giả
+- [x] CI dùng `global-json-file`
 
-## ⏳ `b34-signalr` — Buổi 33–34
+Kịch bản: [docs/sessions/b40.md](docs/sessions/b40.md)
 
-Mục tiêu: quầy barista thấy đơn mới ngay lập tức, cập nhật trạng thái đơn realtime cho khách.
+## ⏳ `b47-auth-cache` — Buổi 42–47
 
-- [ ] `OrderHub : Hub` trong `CyberCafe.Api` (`MapHub<OrderHub>("/hubs/orders")`)
-- [ ] Khi `POST /api/orders` thành công → `IHubContext<OrderHub>.Clients.Group("baristas").SendAsync("OrderPlaced", dto)`
-- [ ] Trang `/barista` (Web): `HubConnectionBuilder`, danh sách đơn `Pending/Preparing/Ready`, nút chuyển trạng thái
-- [ ] `PUT /api/orders/{id}/status` → broadcast `OrderStatusChanged` tới group `order-{id}` → trang `/orders/{id}` của khách tự cập nhật
-- [ ] Phân quyền tạm thời: chọn vai trò (Khách / Barista / Admin) + `[Authorize(Roles = "Barista")]` trên hub method (chuẩn bị cho JWT ở b47); ẩn menu nav theo vai trò
-- [ ] Xử lý reconnect (`WithAutomaticReconnect`), `IAsyncDisposable` dispose connection
-- [ ] Âm báo / badge số đơn mới trên NavMenu
-- [ ] Test: unit test service đổi trạng thái (state machine `OrderStatus` hợp lệ: Pending → Preparing → Ready → Completed)
-- [ ] `docs/sessions/b34.md`
+Mục tiêu: bảo mật theo vai trò + hiệu năng + vận hành an toàn.
 
-## ⏳ `b41-efcore` — Buổi 36–41
-
-Mục tiêu: dữ liệu bền vững với SQL Server.
-
-- [ ] `docker-compose.yml`: `mcr.microsoft.com/mssql/server:2022-latest`, volume, healthcheck; hướng dẫn README
-- [ ] `CyberCafeDbContext` (`DbSet<Product>`, `Order`, `OrderItem`, `Customer`, `Employee`, `Voucher`)
-- [ ] Mapping kế thừa: TPH cho `Product` (discriminator `ProductType`) — so sánh TPT/TPC trong buổi học
-- [ ] Fluent API: `decimal(18,2)`, độ dài chuỗi, owned/value conversion cho `DrinkSize`, `OrderStatus`
-- [ ] Domain cần constructor rỗng `private` cho EF; backing field cho collection `Items`
-- [ ] `dotnet ef migrations add InitialCreate`, `database update`; seed dữ liệu menu (`HasData`)
-- [ ] `EfMenuRepository`, `EfOrderRepository` thay bản in-memory
-- [ ] LINQ: lọc/sắp xếp/phân trang menu (`Skip/Take`), `Include` order items, projection sang DTO, `AsNoTracking`
-- [ ] Báo cáo doanh thu theo ngày bằng LINQ `GroupBy` **và** stored procedure `sp_DailyRevenue` (tạo trong migration, gọi `FromSql`)
-- [ ] Transaction khi đặt đơn; xử lý concurrency (`rowversion`) khi admin sửa giá
-- [ ] Test: EF Core SQLite in-memory hoặc Testcontainers cho repository
-- [ ] `docs/sessions/b36.md` … `b41.md` (gộp theo chủ đề)
-
-## ⏳ `b47-auth-filters` — Buổi 42–47
-
-Mục tiêu: bảo mật + hiệu năng + tổ chức truy cập dữ liệu.
-
-- [ ] Bảng `Users` (Email, PasswordHash, Role); đăng ký/đăng nhập, hash bằng **BCrypt.Net-Next**
-- [ ] JWT: `AddAuthentication().AddJwtBearer`, phát access token (+ refresh token tùy thời lượng), claims role
-- [ ] Policy: `Admin` quản lý menu, `Barista` xử lý đơn, `Customer` đặt đơn & xem đơn của mình
-- [ ] Web: lưu token, `DelegatingHandler` gắn `Authorization: Bearer`, `AuthenticationStateProvider` tùy biến, `<AuthorizeView>`
-- [ ] Middleware tự viết: request logging + correlation id; global exception handler → `ProblemDetails`
-- [ ] Filters: `ValidationFilter` (action filter), `ApiKey`/audit filter, exception filter — so sánh với middleware
-- [ ] Caching: `IMemoryCache` → `IDistributedCache` Redis (Docker) cho `GET /api/products`; invalidation khi CRUD; thử `HybridCache`
-- [ ] Repository + Unit of Work (`IUnitOfWork.SaveChangesAsync`) — thảo luận ưu/nhược khi đã có DbContext
-- [ ] Rate limiting cho endpoint đăng nhập
-- [ ] Test: integration test 401/403 theo vai trò; unit test password hasher, token service
-- [ ] `docs/sessions/b42.md` … `b47.md`
+- [ ] Bảng `Users` (Email, PasswordHash **BCrypt**, Role: Customer/Barista/Admin) + `RefreshTokens`; tài khoản dev chỉ seed ở môi trường Development
+- [ ] `POST /api/auth/register|login|refresh|logout`, `GET /api/auth/me`; JWT access token + refresh token xoay vòng (phát hiện dùng lại)
+- [ ] Policy: Admin quản lý menu + báo cáo; Barista đổi trạng thái đơn + vào group hub; Customer đặt đơn và chỉ xem đơn của mình (chặn IDOR)
+- [ ] Web: trang đăng nhập/đăng ký, `AuthenticationStateProvider` tự viết, `DelegatingHandler` gắn Bearer (+ refresh khi 401), `<AuthorizeView>`, menu theo vai trò, hub gửi `access_token`
+- [ ] Middleware: correlation id + request logging; exception handler toàn cục → `ProblemDetails`
+- [ ] Filter có giá trị thật (so với lab b43): validation filter thống nhất lỗi 400; filter xóa cache menu sau khi ghi
+- [ ] Redis (`IDistributedCache`) cho `GET /api/products`, invalidation khi ghi, tự lùi về DB khi Redis lỗi; Redis trong `docker-compose.yml`
+- [ ] ADR: dùng `DbContext` trực tiếp, chưa thêm Repository/UoW (b48 sẽ tách interface)
+- [ ] Rate limiting cho đăng nhập
+- [ ] Test: 401/403 theo vai trò, IDOR, refresh rotation/reuse, hash mật khẩu, cache invalidation, rate limit
 
 ## ⏳ `b48-clean-arch` — Buổi 48
 
@@ -121,6 +90,7 @@ Mục tiêu: tái cấu trúc theo Clean Architecture, không đổi hành vi.
 - [ ] Tạo `CyberCafe.Application` (use case / service interface, DTO, validation), `CyberCafe.Infrastructure` (EF, Redis, JWT, BCrypt), giữ `CyberCafe.Domain` thuần
 - [ ] `CyberCafe.Api` chỉ còn controller mỏng + composition root (`AddApplication()`, `AddInfrastructure()`)
 - [ ] Chiều phụ thuộc: Api → Application → Domain; Infrastructure → Application (implement interface)
+- [ ] Interface truy cập dữ liệu ở Application (lúc này mới có lý do cho repository — xem ADR của b47)
 - [ ] Architecture test (NetArchTest/ArchUnitNET): Domain không reference Infrastructure/EF
 - [ ] Sơ đồ layer trong `docs/architecture.md`
 - [ ] Toàn bộ test cũ vẫn xanh (chứng minh refactor an toàn)
@@ -130,26 +100,25 @@ Mục tiêu: tái cấu trúc theo Clean Architecture, không đổi hành vi.
 
 Mục tiêu: mô hình hóa nghiệp vụ đơn hàng chặt chẽ + tách đọc/ghi.
 
-- [ ] `Order` thành **aggregate root**: chỉ thay đổi qua method (`AddItem`, `ApplyDiscount`, `Pay`, `StartPreparing`, `MarkReady`, `Complete`, `Cancel`), bảo vệ invariant (không sửa đơn đã thanh toán...)
+- [ ] `Order` thành **aggregate root**: chỉ thay đổi qua method (`AddItem`, `ApplyDiscount`, `Pay`, `StartPreparing`, `MarkReady`, `Complete`, `Cancel`), bảo vệ invariant — thay cho `OrderStatusFlow` dạng bảng
 - [ ] Value objects: `Money`, `PhoneNumber`, `OrderId`; `DrinkSize` + giá thành value object
-- [ ] Domain events: `OrderPlaced`, `OrderPaid`, `OrderReady` → handler gửi SignalR / cộng điểm
+- [ ] Domain events: `OrderPlaced`, `OrderPaid`, `OrderReady` → handler gửi SignalR / cộng điểm (thay `IOrderNotifier` gọi tay trong controller)
 - [ ] CQRS với MediatR (hoặc tự viết dispatcher): `PlaceOrderCommand`, `ChangeOrderStatusCommand`, `GetMenuQuery`, `GetOrderByIdQuery`
-- [ ] Pipeline behavior: validation (FluentValidation), logging, transaction
+- [ ] Pipeline behavior: validation, logging, transaction
 - [ ] Read model tối ưu cho màn hình barista (projection / Dapper)
 - [ ] Test: unit test invariant aggregate, handler test
 - [ ] `docs/sessions/b49.md` … `b53.md`
 
-## ⏳ `b55-microservice` — Buổi 51–55
+## ⏳ `b55-microservice` — Buổi 54–55
 
 Mục tiêu: tách hệ thống thành các service độc lập, điều phối bằng .NET Aspire.
 
 - [ ] `CyberCafe.AppHost` (.NET Aspire) + `CyberCafe.ServiceDefaults` (OpenTelemetry, health check, service discovery)
 - [ ] Tách service: `Menu.Api`, `Order.Api`, `Payment.Api` — mỗi service 1 database riêng
-- [ ] API Gateway **YARP** (`Gateway`): route `/menu/*`, `/orders/*`, `/payments/*`, gắn auth JWT tập trung
+- [ ] API Gateway **YARP**: route `/menu/*`, `/orders/*`, `/payments/*`, gắn auth JWT tập trung
 - [ ] Message broker: **RabbitMQ** (MassTransit) *hoặc* **Kafka** — chọn 1, ghi lý do trong ADR
 - [ ] Luồng sự kiện: `OrderPlaced` → Payment xử lý → `PaymentCompleted` → Order cập nhật → barista nhận qua SignalR
 - [ ] Outbox pattern để không mất message; idempotent consumer
 - [ ] Resilience: `AddStandardResilienceHandler` (retry, circuit breaker, timeout)
-- [ ] Aspire dashboard: trace xuyên service; Redis + SQL Server + broker khai báo trong AppHost
-- [ ] Docker compose / `azd` để deploy demo (tùy chọn)
-- [ ] `docs/sessions/b51.md` … `b55.md`
+- [ ] Aspire dashboard: trace xuyên service; Redis + SQL Server + broker khai báo trong AppHost (thay `docker-compose.yml`)
+- [ ] `docs/sessions/b54.md`, `b55.md`

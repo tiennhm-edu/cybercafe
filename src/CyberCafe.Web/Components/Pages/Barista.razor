@@ -1,0 +1,220 @@
+@* ==========================================================================
+   Barista.razor — màn hình quầy pha chế /barista (Buổi 33–34 · SignalR client trong Blazor Server).
+   - Lúc mở trang: tải các đơn đang chạy qua REST (GET /api/orders).
+   - Sau đó: HubConnection tới Api/hubs/orders, vào group "baristas" → đơn mới tự hiện, không cần F5.
+   - Bấm nút → PUT /api/orders/{id}/status (REST); Api broadcast OrderStatusChanged
+     → MỌI màn hình barista + trang của khách cùng cập nhật.
+   Mở 2 tab: 1 tab /barista, 1 tab đặt hàng → thấy đơn "bay" sang quầy ngay lập tức.
+   ========================================================================== *@
+@page "/barista"
+@* IAsyncDisposable (không phải IDisposable): dọn HubConnection cần await DisposeAsync() *@
+@implements IAsyncDisposable
+@inject OrderApiClient OrderApi
+@inject OrderHubConnectionFactory HubFactory
+@inject ILogger<Barista> Logger
+
+<PageTitle>CyberCafe — Quầy barista</PageTitle>
+
+<div class="d-flex align-items-center gap-3 mb-3">
+    <h1 class="mb-0">Quầy barista</h1>
+    @* Trạng thái kết nối realtime: giúp barista biết khi nào cần F5 *@
+    <span class="badge @(_connected ? "bg-success" : "bg-secondary")">@_connectionText</span>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+@* null = chưa tải xong lần đầu; danh sách rỗng thì từng cột tự hiện "Không có đơn" *@
+@if (_orders is null)
+{
+    <p><span class="spinner-border spinner-border-sm"></span> Đang tải đơn...</p>
+}
+else
+{
+    @* 3 cột theo trạng thái — mỗi cột lọc từ cùng 1 danh sách _orders *@
+    <div class="row g-3">
+        @foreach (OrderStatus column in Columns)
+        {
+            List<OrderDto> inColumn = _orders.Where(o => o.Status == column).OrderBy(o => o.CreatedAt).ToList();
+            <div class="col-lg-4">
+                <h2 class="h5"><OrderStatusBadge Status="column" /> <span class="text-muted">(@inColumn.Count)</span></h2>
+                @if (inColumn.Count == 0)
+                {
+                    <p class="text-muted small">Không có đơn.</p>
+                }
+                @foreach (OrderDto order in inColumn)
+                {
+                    @* @key: đơn chuyển cột → Blazor nhận ra đúng card, không vẽ nhầm nội dung *@
+                    <div class="card mb-2" @key="order.Id">
+                        <div class="card-body p-2">
+                            <div class="d-flex justify-content-between">
+                                <strong>@order.Code</strong>
+                                <small class="text-muted">@order.CreatedAt.ToString("HH:mm")</small>
+                            </div>
+                            @* Barista chỉ cần tên để gọi khách; giá tiền không hiện ở quầy pha chế *@
+                            <div class="small">@order.CustomerName</div>
+                            <ul class="small mb-1 ps-3">
+                                @foreach (OrderItemDto item in order.Items)
+                                {
+                                    <li>@item.Emoji @item.ProductName @(item.HasSize ? $"({item.Size})" : "") × @item.Quantity</li>
+                                }
+                            </ul>
+                            @if (order.Note is not null)
+                            {
+                                <div class="small fst-italic mb-1">📝 @order.Note</div>
+                            }
+                            @* Chỉ hiện các nút HỢP LỆ theo OrderStatusFlow (Domain) — cùng bảng luật mà Api kiểm tra *@
+                            @foreach (OrderStatus next in OrderStatusFlow.NextSteps(order.Status))
+                            {
+                                <button class="btn btn-sm @(next == OrderStatus.Cancelled ? "btn-outline-danger" : "btn-primary") me-1"
+                                        disabled="@(_busyOrderId == order.Id)"
+                                        @onclick="() => ChangeStatusAsync(order, next)">
+                                    @ActionText(next)
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    // 3 cột của màn hình — Completed/Cancelled không hiện (đơn đã xong việc với quầy)
+    private static readonly OrderStatus[] Columns = [OrderStatus.Pending, OrderStatus.Preparing, OrderStatus.Ready];
+
+    // Danh sách đơn đang chạy — CẢ REST (tải lần đầu) và SignalR (cập nhật) đều ghi vào đây
+    private List<OrderDto>? _orders;
+    private string? _error;
+    // Field để DisposeAsync đóng kết nối khi rời trang
+    private HubConnection? _hub;
+    private bool _connected;
+    private string _connectionText = "Đang kết nối...";
+    // Đơn đang gửi request đổi trạng thái (khóa nút của riêng đơn đó)
+    private int? _busyOrderId;
+
+    // Lifecycle 1: tải dữ liệu ban đầu bằng REST (chạy cả lúc prerender — chỉ là 1 GET, không sao)
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _orders = (await OrderApi.GetActiveAsync()).ToList();
+            _error = null;
+        }
+        catch (ApiException ex)
+        {
+            _orders ??= [];
+            _error = ex.Message;
+        }
+    }
+
+    // 👉 Bước 12 (b40.md): kết nối realtime khi component đã INTERACTIVE (sau render đầu tiên)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        // Biến cục bộ (không null) dùng trong lambda bên dưới; field _hub để DisposeAsync đóng kết nối
+        HubConnection hub = HubFactory.Create();
+        _hub = hub;
+
+        // On<T>(tên sự kiện, handler): đăng ký nhận sự kiện server gửi xuống.
+        // Handler chạy trên luồng SignalR → InvokeAsync đưa về luồng render của component.
+        // ⚠️ Lỗi hay gặp: gọi StateHasChanged() trực tiếp trong handler → "The current thread is not associated with the Dispatcher".
+        hub.On<OrderDto>(OrderHubContract.OrderPlaced, order => InvokeAsync(() => Upsert(order)));
+        hub.On<OrderDto>(OrderHubContract.OrderStatusChanged, order => InvokeAsync(() => Upsert(order)));
+
+        // Vòng đời kết nối khi bật WithAutomaticReconnect: Reconnecting → Reconnected (hoặc Closed nếu bỏ cuộc)
+        hub.Reconnecting += _ => InvokeAsync(() => SetConnection(false, "Mất kết nối, đang thử lại..."));
+        hub.Reconnected += async _ =>
+        {
+            // ConnectionId mới → vào group lại; tải lại danh sách vì có thể đã lỡ sự kiện lúc mất mạng
+            await hub.InvokeAsync(OrderHubContract.JoinBaristas);
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                SetConnection(true, "Đã kết nối lại");
+            });
+        };
+        hub.Closed += _ => InvokeAsync(() => SetConnection(false, "Đã ngắt — tải lại trang để kết nối"));
+
+        try
+        {
+            await hub.StartAsync();
+            await hub.InvokeAsync(OrderHubContract.JoinBaristas); // vào group "baristas"
+            SetConnection(true, "Realtime: đã kết nối");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Không kết nối được OrderHub");
+            SetConnection(false, "Không kết nối được realtime");
+        }
+    }
+
+    // Thêm/sửa đơn trong danh sách; đơn đã kết thúc (Completed/Cancelled) thì bỏ khỏi màn hình.
+    // Gọi 2 lần với cùng dữ liệu (REST trả về + hub gửi tới) vẫn đúng → thao tác "idempotent".
+    private void Upsert(OrderDto order)
+    {
+        _orders ??= [];
+        _orders.RemoveAll(o => o.Id == order.Id);
+        if (OrderStatusFlow.IsActive(order.Status))
+        {
+            _orders.Add(order);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task ChangeStatusAsync(OrderDto order, OrderStatus next)
+    {
+        _busyOrderId = order.Id; // khóa nút của đơn này → chống bấm 2 lần
+        try
+        {
+            Upsert(await OrderApi.ChangeStatusAsync(order.Id, next));
+            _error = null;
+        }
+        catch (ApiException ex)
+        {
+            // 409: barista khác vừa đổi trạng thái đơn này trước → báo lỗi và tải lại cho đúng
+            _error = ex.Message;
+            await LoadAsync();
+        }
+        finally
+        {
+            _busyOrderId = null;
+        }
+    }
+
+    // Cập nhật badge trạng thái kết nối; luôn được gọi trong InvokeAsync (đúng luồng render)
+    private void SetConnection(bool connected, string text)
+    {
+        _connected = connected;
+        _connectionText = text;
+        StateHasChanged();
+    }
+
+    // Chữ trên nút = HÀNH ĐỘNG của barista (khác chữ trạng thái trên badge)
+    private static string ActionText(OrderStatus next) => next switch
+    {
+        OrderStatus.Preparing => "Bắt đầu pha",
+        OrderStatus.Ready => "Xong — gọi khách",
+        OrderStatus.Completed => "Đã giao",
+        _ => "Hủy"
+    };
+
+    // Rời trang → đóng kết nối WebSocket tới Api (HubConnection.DisposeAsync là async → IAsyncDisposable)
+    public async ValueTask DisposeAsync()
+    {
+        if (_hub is not null)
+        {
+            await _hub.DisposeAsync();
+        }
+    }
+}

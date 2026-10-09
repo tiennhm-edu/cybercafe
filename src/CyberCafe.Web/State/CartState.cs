@@ -8,6 +8,8 @@
 //     dùng chung 1 giỏ, còn người dùng khác có giỏ riêng.
 //   - Đổi state chỉ qua method → method bắn event OnChange → ai subscribe thì tự render lại.
 // Lưu ý: state nằm trong RAM của server; F5 tải lại trang = circuit mới = giỏ mới (trống).
+// Buổi 32–41: nhớ thêm MÃ giảm giá (DiscountCode) để gửi lên API khi đặt hàng —
+// API chỉ tin mã, không tin số tiền giảm do Web tự tính.
 // ============================================================================
 using CyberCafe.Domain.Discounts;
 using CyberCafe.Domain.Orders;
@@ -36,6 +38,9 @@ public class CartState
     /// </summary>
     public event Action? OnChange;
 
+    /// <summary>Mã giảm giá đang áp dụng (đã chuẩn hóa, vd "GIAM20K"); null = không có. Gửi kèm khi đặt hàng.</summary>
+    public string? DiscountCode { get; private set; }
+
     /// <summary>Thêm món vào giỏ rồi thông báo thay đổi.</summary>
     public void AddItem(Product product, DrinkSize size, int quantity)
     {
@@ -57,17 +62,30 @@ public class CartState
         NotifyStateChanged();
     }
 
-    /// <summary>Áp dụng giảm giá rồi thông báo.</summary>
-    public void ApplyDiscount(Discount discount)
+    /// <summary>
+    /// Tra mã trong <see cref="DiscountCatalog"/> (Domain, dùng chung với Api); hợp lệ thì áp dụng + thông báo.
+    /// Trả về false nếu mã không tồn tại (giỏ giữ nguyên).
+    /// </summary>
+    public bool ApplyDiscountCode(string? code)
     {
+        // DiscountCatalog trả về Discount (class cha) — CartState không cần biết là Voucher hay Member
+        Discount? discount = DiscountCatalog.FindByCode(code);
+        if (discount is null)
+        {
+            return false;
+        }
+
         Cart.ApplyDiscount(discount);
+        DiscountCode = DiscountCatalog.Normalize(code);
         NotifyStateChanged();
+        return true;
     }
 
     /// <summary>Bỏ giảm giá rồi thông báo.</summary>
     public void ClearDiscount()
     {
         Cart.ClearDiscount();
+        DiscountCode = null;
         NotifyStateChanged();
     }
 
@@ -75,6 +93,7 @@ public class CartState
     public void Clear()
     {
         Cart.Clear();
+        DiscountCode = null;
         NotifyStateChanged();
     }
 

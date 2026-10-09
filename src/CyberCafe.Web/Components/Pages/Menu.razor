@@ -4,14 +4,16 @@
    Buổi 24–31: tách card thành component con <ProductCard>, nhận sự kiện
    "thêm vào giỏ" qua EventCallback, lọc bằng @bind / @bind:event, ghi vào
    CartState, và quan sát LIFECYCLE (OnInitializedAsync, OnAfterRender, Dispose).
+   Buổi 32–35: dữ liệu lấy từ CyberCafe.Api qua MenuApiClient (typed HttpClient) thay cho
+   MenuService in-memory — markup gần như giữ nguyên vì client trả về đúng domain Product.
    ========================================================================== *@
 @page "/menu"
 @* @implements IDisposable: Blazor sẽ gọi Dispose() khi component bị bỏ (rời trang). *@
 @implements IDisposable
 @* @inject <Kiểu> <TênBiến>: xin DI container 1 instance (đã đăng ký trong Program.cs).
    ⚠️ Lỗi hay gặp: quên AddSingleton/AddScoped trong Program.cs → lỗi lúc chạy
-   "Cannot provide a value for property 'MenuService'... no registered service". *@
-@inject MenuService MenuService
+   "Cannot provide a value for property 'MenuApi'... no registered service". *@
+@inject MenuApiClient MenuApi
 @inject CartState CartState
 @* ILogger<Menu>: ghi log ra console — dùng để quan sát thứ tự các hàm lifecycle. *@
 @inject ILogger<Menu> Logger
@@ -20,7 +22,15 @@
 
 <h1>Thực đơn</h1>
 
-@if (_products is null)
+@if (_error is not null)
+{
+    @* Lỗi gọi API (API chưa chạy, SQL Server chưa bật...) → báo rõ + cho thử lại, không văng trang lỗi *@
+    <div class="alert alert-danger">
+        @_error
+        <button class="btn btn-sm btn-outline-danger ms-2" @onclick="LoadAsync">Thử lại</button>
+    </div>
+}
+else if (_products is null)
 {
     @* Lần render đầu: OnInitializedAsync chưa xong → hiện loading *@
     <p><span class="spinner-border spinner-border-sm"></span> Đang tải thực đơn...</p>
@@ -80,6 +90,7 @@ else
     private string _keyword = string.Empty;
     private string _category = string.Empty;
     private string? _message;
+    private string? _error;
     // CancellationTokenSource: cho phép HỦY tác vụ async (Task.Delay) nếu người dùng rời trang giữa chừng
     private readonly CancellationTokenSource _cts = new();
 
@@ -94,9 +105,21 @@ else
     // ⚠️ Vì App.razor bật PRERENDER: hàm này chạy 2 LẦN — 1 lần khi server prerender HTML tĩnh,
     // 1 lần nữa khi circuit SignalR kết nối (component được tạo mới). Bình thường, không phải bug;
     // muốn tránh tải 2 lần thì dùng PersistentComponentState (giới thiệu sau).
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    // Tách thành method riêng để nút "Thử lại" gọi lại được
+    private async Task LoadAsync()
     {
-        _products = await MenuService.GetMenuAsync(_cts.Token);
+        _error = null;
+        try
+        {
+            _products = await MenuApi.GetMenuAsync(_cts.Token);
+        }
+        catch (ApiException ex)
+        {
+            // ApiClientBase đã đổi lỗi mạng / ProblemDetails thành thông báo tiếng Việt
+            _error = ex.Message;
+        }
     }
 
     // Lifecycle 2: chạy SAU mỗi lần render. firstRender = true chỉ ở lần đầu (sau khi circuit kết nối).
@@ -130,7 +153,7 @@ else
     // Lifecycle cuối: component bị bỏ (chuyển trang) → dọn dẹp tài nguyên
     public void Dispose()
     {
-        // Rời trang khi đang tải → hủy Task.Delay
+        // Rời trang khi đang tải → hủy request HTTP đang chờ
         _cts.Cancel();
         _cts.Dispose();
     }

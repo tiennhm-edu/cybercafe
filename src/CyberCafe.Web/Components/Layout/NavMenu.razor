@@ -1,5 +1,6 @@
 @* ==========================================================================
-   NavMenu.razor — thanh điều hướng bên trái (Buổi 23 · Routing + NavLink; Buổi 24–31 thêm Giỏ hàng).
+   NavMenu.razor — thanh điều hướng bên trái (Buổi 23 · Routing + NavLink; Buổi 24–31 thêm Giỏ hàng;
+   Buổi 32–41 thêm Quầy barista + Quản lý thực đơn — Buổi 42–47 sẽ ẩn/hiện theo vai trò).
    Mỗi mục là 1 <NavLink> trỏ tới 1 route khai báo bằng @page trong Pages/.
    ========================================================================== *@
 <div class="top-row ps-3 navbar navbar-dark">
@@ -33,6 +34,20 @@
             @* /cart → CartPage.razor (@page "/cart") *@
             <NavLink class="nav-link" href="cart">
                 <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Giỏ hàng
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            @* /barista → Barista.razor: nhận đơn realtime qua SignalR *@
+            <NavLink class="nav-link" href="barista">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Quầy barista
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            @* /admin/menu → Admin/MenuAdmin.razor: CRUD thực đơn qua API *@
+            <NavLink class="nav-link" href="admin/menu">
+                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Quản lý thực đơn
             </NavLink>
         </div>
 

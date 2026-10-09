@@ -5,7 +5,8 @@
 namespace CyberCafe.Domain.Orders;
 
 /// <summary>
-/// Trạng thái đơn. Buổi 33–34 quầy barista sẽ chuyển Pending → Preparing → Ready → Completed.
+/// Trạng thái đơn. Quầy barista chuyển Pending → Preparing → Ready → Completed
+/// (luật chuyển nằm trong <see cref="OrderStatusFlow"/>, Buổi 32–41).
 /// </summary>
 public enum OrderStatus
 {

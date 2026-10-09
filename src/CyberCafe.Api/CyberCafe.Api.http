@@ -1,0 +1,65 @@
+### ============================================================================
+### CyberCafe.Api.http — gọi thử API ngay trong VS / Rider / VS Code (REST Client) (Buổi 32–41).
+### Chạy Api trước: dotnet run --project src/CyberCafe.Api  (cần SQL Server: docker compose up -d)
+### ============================================================================
+@api = http://localhost:5180
+
+### Thực đơn: lọc trà, sắp giá giảm dần, trang 1 (2 món/trang)
+GET {{api}}/api/products?type=tea&sortBy=price&desc=true&page=1&pageSize=2
+
+### Tìm theo tên (SQL Server không phân biệt hoa/thường)
+GET {{api}}/api/products?search=trà
+
+### Chi tiết 1 món — thử id 999 để thấy 404 ProblemDetails
+GET {{api}}/api/products/3
+
+### Thêm món → 201 + header Location
+POST {{api}}/api/products
+Content-Type: application/json
+
+{
+  "type": "cake",
+  "name": "Bánh flan",
+  "price": 20000,
+  "variant": "Caramen",
+  "emoji": "🍮",
+  "isAvailable": true
+}
+
+### Thêm món sai dữ liệu → 400 ValidationProblem (lỗi theo từng field)
+POST {{api}}/api/products
+Content-Type: application/json
+
+{ "type": "pizza", "name": "", "price": -1, "variant": "" }
+
+### Đặt hàng: 2 cà phê sữa size M + 1 tiramisu, voucher GIAM20K, trả bằng thẻ
+POST {{api}}/api/orders
+Content-Type: application/json
+
+{
+  "customerName": "Nguyễn Văn An",
+  "phoneNumber": "0901234567",
+  "items": [
+    { "productId": 1, "size": "M", "quantity": 2 },
+    { "productId": 7, "size": "S", "quantity": 1 }
+  ],
+  "discountCode": "GIAM20K",
+  "paymentMethod": "Card",
+  "cardNumber": "4111111111111111",
+  "note": "Ít đá"
+}
+
+### Đơn đang chạy (màn hình barista)
+GET {{api}}/api/orders?status=Pending&status=Preparing&status=Ready
+
+### Đổi trạng thái: Pending → Preparing (thử "Ready" ngay để thấy 409)
+PUT {{api}}/api/orders/1/status
+Content-Type: application/json
+
+{ "status": "Preparing" }
+
+### Hủy đơn (chỉ khi còn Pending/Preparing)
+POST {{api}}/api/orders/1/cancel
+
+### Doanh thu theo ngày — trên SQL Server gọi stored procedure dbo.usp_DailyRevenue
+GET {{api}}/api/reports/daily-revenue?from=2026-10-01&to=2026-10-31

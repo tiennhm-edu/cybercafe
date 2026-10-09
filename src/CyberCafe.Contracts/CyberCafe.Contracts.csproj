@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    CyberCafe.Contracts (Buổi 32–41): DTO / request / hằng số dùng CHUNG giữa Api (server) và Web (client).
+    Chỉ chứa record/class "dữ liệu thuần" + DataAnnotations → không kéo theo ASP.NET hay EF Core.
+    Tham chiếu Domain chỉ để dùng lại các enum (OrderStatus, DrinkSize, PaymentMethod).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CyberCafe.Domain\CyberCafe.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

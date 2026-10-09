@@ -1,5 +1,10 @@
 // ============================================================================
-// Order.cs — đơn hàng đã chốt (Buổi 24–31 · Composition + Polymorphism).
+// Order.cs — đơn hàng đã chốt (Buổi 24–31 · Composition + Polymorphism;
+//            Buổi 32–41: Id do database sinh, trạng thái chỉ đổi qua ChangeStatus, constructor cho EF Core).
+// EF Core lưu nguyên class domain này (không có class "entity" riêng) nhờ 3 thay đổi nhỏ:
+//   1) Id kiểu int do SQL Server sinh (IDENTITY), mã hiển thị CC-0001 thành property tính toán Code.
+//   2) Status có private set → muốn đổi phải qua ChangeStatus (kiểm tra luồng trạng thái hợp lệ).
+//   3) Constructor rỗng private cho EF (xem cuối class).
 // ============================================================================
 using CyberCafe.Domain.Discounts;
 using CyberCafe.Domain.Payments;
@@ -16,9 +21,12 @@ public class Order
 {
     private readonly List<OrderItem> _items;
 
-    // Id gán bởi OrderStore (vd: CC-0001). Buổi 41 sẽ do database sinh.
-    /// <summary>Mã đơn, do OrderStore gán khi lưu.</summary>
-    public string Id { get; set; } = string.Empty;
+    // Buổi 24–31: Id là chuỗi do OrderStore gán. Buổi 32–41: SQL Server tự tăng (IDENTITY) khi SaveChanges.
+    /// <summary>Khóa chính, do database sinh khi lưu (0 = chưa lưu). <c>private set</c>: chỉ EF gán.</summary>
+    public int Id { get; private set; }
+
+    /// <summary>Mã đơn hiển thị cho khách, vd "CC-0007". Tính từ Id nên không cần lưu thành cột.</summary>
+    public string Code => FormatCode(this.Id);
 
     /// <summary>Khách đặt đơn. Property chỉ có <c>get</c>: chỉ gán được trong constructor.</summary>
     public Customer Customer { get; }
@@ -38,8 +46,11 @@ public class Order
     /// <summary>Thời điểm tạo đơn.</summary>
     public DateTime CreatedAt { get; } = DateTime.Now;
 
-    /// <summary>Trạng thái xử lý đơn, mặc định Pending.</summary>
-    public OrderStatus Status { get; set; } = OrderStatus.Pending;
+    /// <summary>
+    /// Trạng thái xử lý đơn, mặc định Pending. <c>private set</c> (Buổi 32–41): đổi qua
+    /// <see cref="ChangeStatus"/> để không ai nhảy cóc Pending → Completed.
+    /// </summary>
+    public OrderStatus Status { get; private set; } = OrderStatus.Pending;
 
     /// <summary>Tổng tiền trước giảm giá.</summary>
     public decimal TotalAmount => this._items.Sum(x => x.TotalPrice);
@@ -93,5 +104,34 @@ public class Order
         }
 
         return result;
+    }
+
+    // 👉 Bước 7 (b40.md): luật nghiệp vụ nằm trong domain, controller chỉ gọi.
+    /// <summary>
+    /// Chuyển trạng thái theo <see cref="OrderStatusFlow"/> (Pending → Preparing → Ready → Completed; hủy khi chưa xong).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Bước chuyển không hợp lệ (vd Pending → Ready).</exception>
+    public void ChangeStatus(OrderStatus next)
+    {
+        if (!OrderStatusFlow.CanChange(this.Status, next))
+        {
+            throw new InvalidOperationException(
+                $"Không thể chuyển đơn {this.Code} từ {OrderStatusFlow.Describe(this.Status)} sang {OrderStatusFlow.Describe(next)}");
+        }
+
+        this.Status = next;
+    }
+
+    /// <summary>"CC-" + Id đủ 4 chữ số. Static để Web/Api định dạng giống hệt nhau.</summary>
+    public static string FormatCode(int id) => $"CC-{id:0000}";
+
+    // 👉 Bước 4 (b40.md): constructor rỗng PRIVATE cho EF Core.
+    // Constructor public nhận items/discount (navigation) → EF không gọi được; EF dùng constructor này
+    // rồi gán từng cột vào backing field (_items, Customer, Note...) — KHÔNG chạy qua validate.
+    // Dữ liệu trong DB đã hợp lệ từ lúc lưu nên bỏ qua validate là chấp nhận được.
+    private Order()
+    {
+        this._items = [];
+        this.Customer = null!; // EF gán từ các cột CustomerName/CustomerPhone (owned type)
     }
 }

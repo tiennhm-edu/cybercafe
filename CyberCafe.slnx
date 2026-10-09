@@ -1,9 +1,12 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/CyberCafe.Domain/CyberCafe.Domain.csproj" />
+    <Project Path="src/CyberCafe.Contracts/CyberCafe.Contracts.csproj" />
+    <Project Path="src/CyberCafe.Api/CyberCafe.Api.csproj" />
     <Project Path="src/CyberCafe.Web/CyberCafe.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CyberCafe.Tests/CyberCafe.Tests.csproj" />
+    <Project Path="tests/CyberCafe.Api.Tests/CyberCafe.Api.Tests.csproj" />
   </Folder>
 </Solution>

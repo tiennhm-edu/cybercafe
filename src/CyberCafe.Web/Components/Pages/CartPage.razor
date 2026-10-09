@@ -5,11 +5,11 @@
    trùng tên với class domain CyberCafe.Domain.Orders.Cart (đã @using trong _Imports)
    → compiler không biết "Cart" là cái nào → lỗi biên dịch khó hiểu.
    Route vẫn là /cart nhờ @page, tên file không ảnh hưởng URL.
+   Buổi 32–41: tra mã qua CartState.ApplyDiscountCode (DiscountCatalog ở Domain, dùng chung với Api).
    ========================================================================== *@
 @page "/cart"
 @implements IDisposable
 @inject CartState CartState
-@inject DiscountService DiscountService
 
 <PageTitle>CyberCafe — Giỏ hàng</PageTitle>
 
@@ -66,7 +66,7 @@ else
             <label class="form-label" for="voucher">Mã giảm giá</label>
             <div class="input-group">
                 @* @bind="_code": two-way, cập nhật khi rời ô (onchange) — đủ dùng vì chỉ đọc khi bấm "Áp dụng" *@
-                <input id="voucher" class="form-control" placeholder="VD: GIAM20K, MEMBER10" @bind="_code" />
+                <input id="voucher" class="form-control" placeholder="@_codeHint" @bind="_code" />
                 <button class="btn btn-outline-secondary" @onclick="ApplyCode">Áp dụng</button>
             </div>
             @if (_codeError is not null)
@@ -101,6 +101,8 @@ else
     private Cart Cart => CartState.Cart;
     private string _code = string.Empty;
     private string? _codeError;
+    // Gợi ý mã mẫu lấy từ DiscountCatalog (Domain) — thêm mã mới không phải sửa trang này
+    private readonly string _codeHint = "VD: " + string.Join(", ", DiscountCatalog.SampleCodes);
 
     // Subscribe để trang tự cập nhật khi giỏ đổi (kể cả thay đổi từ component khác) — xem CartSummary.razor
     protected override void OnInitialized() => CartState.OnChange += HandleCartChanged;
@@ -118,16 +120,9 @@ else
 
     private void ApplyCode()
     {
-        // DiscountService trả về Discount (class cha) — trang không cần biết là Voucher hay Member
-        Discount? discount = DiscountService.FindByCode(_code);
-        if (discount is null)
-        {
-            _codeError = "Mã giảm giá không hợp lệ";
-            return;
-        }
-
-        _codeError = null;
-        CartState.ApplyDiscount(discount);
+        // CartState tra mã trong DiscountCatalog (trả về Discount — class cha) và nhớ MÃ để gửi lên API khi đặt hàng.
+        // Trang không cần biết là Voucher hay Member: phần hiển thị dùng Discount.Display() đa hình.
+        _codeError = CartState.ApplyDiscountCode(_code) ? null : "Mã giảm giá không hợp lệ";
     }
 
     // Unsubscribe khi rời trang — thiếu dòng này là memory leak (xem giải thích ở CartSummary.razor)

@@ -1,0 +1,22 @@
+@* ==========================================================================
+   OrderStatusBadge.razor — nhãn màu cho trạng thái đơn (Buổi 32–41 · component nhỏ tái sử dụng).
+   Dùng ở trang xác nhận đơn (khách) và màn hình barista → 2 nơi luôn cùng màu, cùng chữ.
+   Chữ tiếng Việt lấy từ OrderStatusFlow.Describe (Domain) — thông báo lỗi của Api dùng cùng chữ đó.
+   ========================================================================== *@
+<span class="badge @CssClass">@OrderStatusFlow.Describe(Status)</span>
+
+@code {
+    /// <summary>Trạng thái cần hiển thị.</summary>
+    [Parameter, EditorRequired]
+    public OrderStatus Status { get; set; }
+
+    // switch expression → class Bootstrap theo trạng thái
+    private string CssClass => Status switch
+    {
+        OrderStatus.Pending => "bg-warning text-dark",
+        OrderStatus.Preparing => "bg-info text-dark",
+        OrderStatus.Ready => "bg-success",
+        OrderStatus.Completed => "bg-secondary",
+        _ => "bg-danger"
+    };
+}

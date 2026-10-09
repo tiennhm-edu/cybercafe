@@ -1,5 +1,9 @@
 // ============================================================================
-// OrderItem.cs — 1 dòng trong giỏ/đơn (Buổi 24–31 · Association + computed property).
+// OrderItem.cs — 1 dòng trong giỏ/đơn (Buổi 24–31 · Association + computed property;
+//                Buổi 32–41: chốt đơn giá lúc tạo dòng + constructor rỗng cho EF Core).
+// Vì sao UnitPrice không còn tính "sống" từ Product.GetPrice(size)?
+//   Đơn đã lưu DB phải giữ GIÁ LÚC ĐẶT. Nếu admin tăng giá cà phê ngày mai mà đơn hôm qua
+//   tự đổi tổng tiền → báo cáo doanh thu sai. Nên dòng đơn chụp (snapshot) đơn giá khi tạo.
 // ============================================================================
 using CyberCafe.Domain.Products;
 
@@ -35,9 +39,12 @@ public class OrderItem
         }
     }
 
-    // Computed property: đơn giá theo size (đa hình qua Product.GetPrice)
-    /// <summary>Đơn giá theo size. Coffee/Tea cộng phụ thu, Cake trả giá gốc — OrderItem không cần biết loại.</summary>
-    public decimal UnitPrice => this.Product.GetPrice(this.Size);
+    // Đơn giá theo size, CHỐT tại thời điểm tạo dòng (đa hình qua Product.GetPrice)
+    /// <summary>
+    /// Đơn giá theo size lúc tạo dòng. Coffee/Tea cộng phụ thu, Cake trả giá gốc — OrderItem không cần biết loại.
+    /// Buổi 32–41: lưu thành cột UnitPrice trong bảng OrderItems (giá lịch sử, không đổi khi menu đổi giá).
+    /// </summary>
+    public decimal UnitPrice { get; private set; }
 
     /// <summary>Thành tiền của dòng = đơn giá × số lượng.</summary>
     public decimal TotalPrice => this.UnitPrice * this.Quantity;
@@ -48,6 +55,17 @@ public class OrderItem
         this.Product = product ?? throw new ArgumentNullException(nameof(product));
         this.Size = product.HasSize ? size : DrinkSize.S;
         this.Quantity = quantity;
+        this.UnitPrice = product.GetPrice(this.Size);
+    }
+
+    // 👉 Bước 4 (b40.md): constructor rỗng PRIVATE chỉ dành cho EF Core.
+    // EF đọc 1 dòng từ bảng OrderItems → cần tạo object trước rồi mới gán cột vào field.
+    // Constructor public ở trên nhận Product (navigation) — EF không truyền navigation qua constructor được.
+    // private: code của ta không gọi nhầm được (object rỗng không hợp lệ), EF vẫn gọi được bằng reflection.
+    // ⚠️ Lỗi hay gặp: thiếu constructor này → "No suitable constructor was found for entity type 'OrderItem'".
+    private OrderItem()
+    {
+        this.Product = null!; // EF gán lại khi Include(i => i.Product)
     }
 
     /// <summary>Tăng số lượng thêm <paramref name="amount"/> (mặc định 1).</summary>

@@ -1,0 +1,264 @@
+@* ==========================================================================
+   MenuAdmin.razor — trang quản lý thực đơn /admin/menu (Buổi 32–35 · CRUD qua typed HttpClient).
+   - Bảng món có tìm kiếm + lọc loại + PHÂN TRANG phía server (GET /api/products?page=&pageSize=).
+   - Form thêm/sửa dùng chung ProductRequest (Contracts) làm Model → cùng DataAnnotations với Api.
+   - Xóa có bước xác nhận ngay trên dòng (không cần JS confirm()).
+   Buổi 42–47: chỉ tài khoản Admin vào được trang này.
+   ========================================================================== *@
+@page "/admin/menu"
+@* Trang chỉ cần MenuApiClient: không biết URL, JSON hay mã lỗi HTTP — mọi thứ đó nằm trong typed client *@
+@inject MenuApiClient MenuApi
+
+<PageTitle>CyberCafe — Quản lý thực đơn</PageTitle>
+
+<h1>Quản lý thực đơn</h1>
+
+@* 2 vùng thông báo: thành công (xanh) và lỗi từ Api (đỏ) — ApiException.Message đã là tiếng Việt *@
+@if (_message is not null)
+{
+    <div class="alert alert-success py-2">@_message</div>
+}
+@if (_error is not null)
+{
+    <div class="alert alert-danger py-2">@_error</div>
+}
+
+<div class="row g-4">
+    <div class="col-xl-8">
+        @* Bộ lọc: chỉ gửi lên API khi bấm "Lọc" (về trang 1) *@
+        <div class="row g-2 mb-2">
+            <div class="col-md-6">
+                @* @bind thẳng vào property của ProductQuery → khi bấm "Lọc" chỉ cần gửi _query đi *@
+                <input class="form-control" placeholder="Tìm theo tên..." @bind="_query.Search" />
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" @bind="_query.Type">
+                    <option value="">Mọi loại</option>
+                    @foreach (string type in ProductTypes.All)
+                    {
+                        <option value="@type">@ProductTypes.CategoryOf(type)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-outline-primary w-100" @onclick="() => LoadPageAsync(1)">Lọc</button>
+            </div>
+        </div>
+
+        @if (_page is null)
+        {
+            <p><span class="spinner-border spinner-border-sm"></span> Đang tải...</p>
+        }
+        else
+        {
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Món</th>
+                        <th>Nhóm</th>
+                        <th class="text-end">Giá</th>
+                        <th>Trạng thái</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @* Bảng hiển thị DTO (không cần domain): trang quản trị chỉ đọc/ghi dữ liệu thô *@
+                    @foreach (ProductDto product in _page.Items)
+                    {
+                        <tr @key="product.Id">
+                            <td>@product.Id</td>
+                            <td>@product.Emoji @product.Name <div class="small text-muted">@product.Variant</div></td>
+                            @* Category là property tính toán của ProductDto (suy ra từ Type) *@
+                            <td>@product.Category</td>
+                            <td class="text-end">@product.Price.ToString("N0") đ</td>
+                            <td>@(product.IsAvailable ? "Đang bán" : "Tạm hết")</td>
+                            <td class="text-end text-nowrap">
+                                @if (_confirmDeleteId == product.Id)
+                                {
+                                    @* Bước xác nhận: bấm "Xóa" lần 1 chỉ đổi giao diện, lần 2 mới gọi API *@
+                                    <span class="small me-1">Xóa thật?</span>
+                                    <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(product)">Có</button>
+                                    <button class="btn btn-sm btn-link" @onclick="() => _confirmDeleteId = null">Không</button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(product)">Sửa</button>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => _confirmDeleteId = product.Id">Xóa</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            @* Phân trang: dữ liệu TotalPages/HasNext do API tính (PagedResult) *@
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(!_page.HasPrevious)" @onclick="() => LoadPageAsync(_page.Page - 1)">« Trước</button>
+                <span class="small">Trang @_page.Page / @Math.Max(1, _page.TotalPages) · @_page.TotalCount món</span>
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(!_page.HasNext)" @onclick="() => LoadPageAsync(_page.Page + 1)">Sau »</button>
+            </div>
+        }
+    </div>
+
+    <div class="col-xl-4">
+        <div class="card">
+            <div class="card-header">@(_editingId is null ? "Thêm món" : $"Sửa món #{_editingId}")</div>
+            <div class="card-body">
+                @* Model = ProductRequest (Contracts): [Required], [Range]... giống hệt phía Api *@
+                <EditForm Model="_form" OnValidSubmit="SaveAsync" FormName="menu-admin">
+                    @* Cùng [Required]/[Range] với Api: lỗi hiện ngay, không cần gửi request mới biết sai *@
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-2">
+                        <label class="form-label" for="type">Loại</label>
+                        @* Đang sửa thì khóa ô Loại: Api không cho đổi Coffee → Cake (TPH) *@
+                        <InputSelect id="type" class="form-select" @bind-Value="_form.Type" disabled="@(_editingId is not null)">
+                            @foreach (string type in ProductTypes.All)
+                            {
+                                <option value="@type">@ProductTypes.CategoryOf(type)</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label" for="name">Tên món</label>
+                        <InputText id="name" class="form-control" @bind-Value="_form.Name" />
+                        <ValidationMessage For="() => _form.Name" class="text-danger small" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label" for="price">Giá (size S)</label>
+                        @* InputNumber: chỉ nhận số; bind vào decimal Price *@
+                        <InputNumber id="price" class="form-control" @bind-Value="_form.Price" />
+                        <ValidationMessage For="() => _form.Price" class="text-danger small" />
+                    </div>
+                    <div class="mb-2">
+                        @* Nhãn đổi theo loại: Loại hạt / Loại trà / Hương vị *@
+                        <label class="form-label" for="variant">@ProductTypes.VariantLabel(_form.Type)</label>
+                        <InputText id="variant" class="form-control" @bind-Value="_form.Variant" />
+                        <ValidationMessage For="() => _form.Variant" class="text-danger small" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label" for="desc">Mô tả</label>
+                        <InputTextArea id="desc" class="form-control" rows="2" @bind-Value="_form.Description" />
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-5">
+                            <label class="form-label" for="emoji">Emoji</label>
+                            <InputText id="emoji" class="form-control" @bind-Value="_form.Emoji" />
+                        </div>
+                        <div class="col-7 d-flex align-items-end">
+                            <div class="form-check">
+                                <InputCheckbox id="available" class="form-check-input" @bind-Value="_form.IsAvailable" />
+                                <label class="form-check-label" for="available">Đang bán</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* disabled khi đang lưu → chống bấm 2 lần tạo 2 món trùng *@
+                    <button type="submit" class="btn btn-success" disabled="@_saving">Lưu</button>
+                    <button type="button" class="btn btn-link" @onclick="ResetForm">Hủy</button>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // PageSize nhỏ (5) để thấy rõ phân trang với 8 món mẫu
+    private readonly ProductQuery _query = new() { PageSize = 5 };
+    // null = chưa tải xong (markup hiện spinner)
+    private PagedResult<ProductDto>? _page;
+    // Model của EditForm: tạo object MỚI mỗi lần reset → form trống, hết lỗi validate cũ
+    private ProductRequest _form = new();
+    // null = đang thêm mới; có giá trị = đang sửa món #id
+    private int? _editingId;
+    // Id món đang chờ xác nhận xóa (chỉ 1 dòng một lúc)
+    private int? _confirmDeleteId;
+    private bool _saving;
+    private string? _message;
+    private string? _error;
+
+    // Lifecycle: tải trang 1 khi vào trang (chạy cả lúc prerender — chỉ là 1 GET)
+    protected override Task OnInitializedAsync() => LoadPageAsync(1);
+
+    private async Task LoadPageAsync(int page)
+    {
+        _query.Page = page;
+        // Select để trống → "" ; API hiểu "" là không lọc nhưng regex sẽ báo lỗi → đổi thành null
+        _query.Type = string.IsNullOrEmpty(_query.Type) ? null : _query.Type;
+        try
+        {
+            _page = await MenuApi.GetPageAsync(_query);
+            _error = null;
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private void StartEdit(ProductDto product)
+    {
+        _editingId = product.Id;
+        _message = null;
+        // Copy DTO → form (object MỚI): sửa trên form không làm đổi dòng trong bảng cho tới khi lưu
+        _form = new ProductRequest
+        {
+            Type = product.Type,
+            Name = product.Name,
+            Price = product.Price,
+            Variant = product.Variant,
+            Description = product.Description,
+            Emoji = product.Emoji,
+            IsAvailable = product.IsAvailable,
+        };
+    }
+
+    private void ResetForm()
+    {
+        _editingId = null;
+        _form = new ProductRequest();
+    }
+
+    // 👉 Bước 11 (b40.md): POST khi thêm, PUT khi sửa; lỗi 400 từ Api hiện trong alert
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _message = null;
+        try
+        {
+            ProductDto saved = _editingId is int id
+                ? await MenuApi.UpdateAsync(id, _form)
+                : await MenuApi.CreateAsync(_form);
+            _message = $"Đã lưu \"{saved.Name}\" (#{saved.Id}).";
+            _error = null;
+            ResetForm();
+            await LoadPageAsync(_query.Page);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(ProductDto product)
+    {
+        _confirmDeleteId = null;
+        try
+        {
+            await MenuApi.DeleteAsync(product.Id);
+            _message = $"Đã xóa \"{product.Name}\".";
+            _error = null;
+            await LoadPageAsync(_query.Page);
+        }
+        catch (ApiException ex)
+        {
+            // 409: món đã có trong đơn → Api từ chối, gợi ý đánh dấu "Tạm hết"
+            _error = ex.Message;
+        }
+    }
+}

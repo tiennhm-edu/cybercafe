@@ -2,6 +2,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CyberCafe.Domain\CyberCafe.Domain.csproj" />
+    <!-- Buổi 32–41: DTO dùng chung với Api (ProductDto, OrderDto, PlaceOrderRequest...) -->
+    <ProjectReference Include="..\CyberCafe.Contracts\CyberCafe.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Buổi 33–34: HubConnection (.NET client của SignalR) để nhận đơn realtime từ Api -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
   </ItemGroup>
 
   <PropertyGroup>

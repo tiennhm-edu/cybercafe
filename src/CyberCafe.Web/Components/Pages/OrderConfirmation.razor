@@ -1,97 +1,190 @@
 @* ==========================================================================
    OrderConfirmation.razor — trang xác nhận đơn /orders/{OrderId}
-   (Buổi 24–31 · Route parameter + OnParametersSet).
+   (Buổi 24–31 · Route parameter + OnParametersSet;
+    Buổi 32–35 · đọc đơn từ API; Buổi 33–34 · trạng thái tự cập nhật qua SignalR).
+   Khách để trang này mở: barista bấm "Bắt đầu pha" → badge đổi ngay, không cần F5.
    ========================================================================== *@
-@* {OrderId}: route parameter — phần URL này được gán vào property [Parameter] cùng tên bên dưới.
+@* {OrderId:int}: route parameter có RÀNG BUỘC kiểu — /orders/abc không khớp route → trang NotFound.
    ⚠️ Lỗi hay gặp: đặt tên property khác tên trong {…} (vd Id) → giá trị không được gán. *@
-@page "/orders/{OrderId}"
-@inject OrderStore OrderStore
+@page "/orders/{OrderId:int}"
+@* IAsyncDisposable: trang giữ 1 HubConnection, rời trang phải đóng (DisposeAsync) *@
+@implements IAsyncDisposable
+@inject OrderApiClient OrderApi
+@inject OrderHubConnectionFactory HubFactory
+@inject ILogger<OrderConfirmation> Logger
 
-@* Biểu thức @OrderId dùng được cả trong PageTitle *@
-<PageTitle>CyberCafe — Đơn @OrderId</PageTitle>
+@* Order.FormatCode (static, Domain): định dạng CC-0007 giống hệt Api, kể cả khi chưa tải xong đơn *@
+<PageTitle>CyberCafe — Đơn @Order.FormatCode(OrderId)</PageTitle>
 
-@if (_order is null)
+@* Thứ tự kiểm tra: lỗi gọi API → đang tải → không có đơn (404) → hiển thị đơn *@
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else if (_loading)
+{
+    <p><span class="spinner-border spinner-border-sm"></span> Đang tải đơn...</p>
+}
+else if (_order is null)
 {
     <h1>Không tìm thấy đơn</h1>
-    <p>Không có đơn hàng mã <code>@OrderId</code>. Lưu ý: đơn đang lưu in-memory, khởi động lại app sẽ mất.</p>
+    <p>Không có đơn hàng mã <code>@Order.FormatCode(OrderId)</code>.</p>
     <a href="menu">Về thực đơn</a>
 }
 else
 {
     <div class="alert alert-success">
-        <h4 class="alert-heading mb-1">🎉 Đặt hàng thành công!</h4>
-        Mã đơn <strong>@_order.Id</strong> — vui lòng đọc mã này khi nhận món tại quầy.
+        <h1 class="h4 alert-heading mb-1">🎉 Đặt hàng thành công!</h1>
+        Mã đơn <strong>@_order.Code</strong> — vui lòng đọc mã này khi nhận món tại quầy.
     </div>
 
     <dl class="row">
         <dt class="col-sm-3">Khách hàng</dt>
-        @* Customer.Display() là bản override: thêm "Điểm: ..." vào mô tả của Person *@
-        <dd class="col-sm-9">@_order.Customer.Display()</dd>
+        <dd class="col-sm-9">@_order.CustomerName - @_order.PhoneNumber</dd>
         <dt class="col-sm-3">Thời gian</dt>
         <dd class="col-sm-9">@_order.CreatedAt.ToString("HH:mm dd/MM/yyyy")</dd>
         <dt class="col-sm-3">Trạng thái</dt>
-        <dd class="col-sm-9"><span class="badge bg-warning text-dark">@StatusText(_order.Status)</span></dd>
+        <dd class="col-sm-9">
+            <OrderStatusBadge Status="_order.Status" />
+            @* Cho khách biết trang đang "nghe" realtime hay không *@
+            <small class="text-muted ms-2">@(_live ? "🟢 cập nhật trực tiếp" : "⚪ không có cập nhật trực tiếp")</small>
+        </dd>
         @if (_order.Note is not null)
         {
             <dt class="col-sm-3">Ghi chú</dt>
             <dd class="col-sm-9">@_order.Note</dd>
         }
-        @if (_order.Payment is not null)
+        @if (_order.PaymentText is not null)
         {
             <dt class="col-sm-3">Thanh toán</dt>
-            @* Payment.Display() đa hình: Cash/Card/Momo mỗi loại hiển thị khác nhau *@
-            <dd class="col-sm-9">@_order.Payment.Display()</dd>
+            @* PaymentText do API tạo bằng Payment.Display() đa hình (Cash/Card/Momo) *@
+            <dd class="col-sm-9">@_order.PaymentText</dd>
         }
     </dl>
 
+    @* Số tiền lấy nguyên từ DTO (server đã tính) — trang không tự cộng lại *@
     <table class="table">
         <tbody>
-            @foreach (OrderItem item in _order.Items)
+            @foreach (OrderItemDto item in _order.Items)
             {
                 <tr>
-                    <td>@item.Product.Emoji @item.Product.Name @(item.Product.HasSize ? $"({item.Size})" : "")</td>
+                    <td>@item.Emoji @item.ProductName @(item.HasSize ? $"({item.Size})" : "")</td>
                     <td class="text-end">× @item.Quantity</td>
-                    <td class="text-end">@item.TotalPrice.ToString("N0") đ</td>
+                    <td class="text-end">@item.LineTotal.ToString("N0") đ</td>
                 </tr>
             }
         </tbody>
         <tfoot>
             <tr><td colspan="2">Tạm tính</td><td class="text-end">@_order.TotalAmount.ToString("N0") đ</td></tr>
-            @if (_order.Discount is not null)
+            @if (_order.DiscountText is not null)
             {
-                <tr><td colspan="2">@_order.Discount.Display()</td><td class="text-end">-@_order.DiscountAmount.ToString("N0") đ</td></tr>
+                <tr><td colspan="2">@_order.DiscountText</td><td class="text-end">-@_order.DiscountAmount.ToString("N0") đ</td></tr>
             }
             <tr class="fw-bold"><td colspan="2">Tổng cộng</td><td class="text-end">@_order.FinalAmount.ToString("N0") đ</td></tr>
         </tfoot>
     </table>
 
-    <p>Điểm tích lũy hiện có: <strong>@_order.Customer.LoyaltyPoints</strong></p>
+    <p>Điểm tích lũy hiện có: <strong>@_order.LoyaltyPoints</strong></p>
     <a class="btn btn-primary" href="menu">Đặt thêm món</a>
 }
 
 @code {
-    // Route parameter: /orders/CC-0001 → OrderId = "CC-0001"
+    // Route parameter: /orders/7 → OrderId = 7 (đã được ràng buộc :int nên chắc chắn là số)
     [Parameter]
-    public string OrderId { get; set; } = string.Empty;
+    public int OrderId { get; set; }
 
-    private Order? _order;
+    private OrderDto? _order;
+    private bool _loading = true;
+    private string? _error;
+    private HubConnection? _hub;
+    // true khi đã vào group order-{id} → badge "cập nhật trực tiếp"
+    private bool _live;
+    // Đơn đang theo dõi trên hub (để biết khi nào cần WatchOrder lại)
+    private int _watchingId;
 
-    // OnParametersSet: chạy mỗi khi parameter đổi (vd: điều hướng từ đơn này sang đơn khác)
-    // Vì sao không dùng OnInitialized? Khi chỉ đổi URL /orders/CC-0001 → /orders/CC-0002, Blazor
-    // GIỮ NGUYÊN component (cùng trang) và chỉ gán OrderId mới → OnInitialized không chạy lại,
-    // trang sẽ vẫn hiện đơn cũ. OnParametersSet chạy cả lần đầu lẫn mỗi lần parameter đổi.
-    protected override void OnParametersSet()
+    // OnParametersSetAsync: chạy lần đầu VÀ mỗi khi OrderId đổi (vd /orders/7 → /orders/8 trên cùng component)
+    protected override async Task OnParametersSetAsync()
     {
-        _order = OrderStore.GetById(OrderId);
+        _loading = true;
+        _error = null;
+        try
+        {
+            _order = await OrderApi.GetByIdAsync(OrderId); // 404 → null → "Không tìm thấy đơn"
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        // Đã có kết nối realtime mà người dùng chuyển sang đơn khác → theo dõi đơn mới
+        if (_hub?.State == HubConnectionState.Connected && _watchingId != OrderId)
+        {
+            await WatchCurrentOrderAsync();
+        }
     }
 
-    // static: không dùng field nào của component. Đổi enum → chữ tiếng Việt để hiển thị.
-    private static string StatusText(OrderStatus status) => status switch
+    // 👉 Bước 12 (b40.md): mở kết nối SignalR ở OnAfterRenderAsync(firstRender) chứ không ở OnInitializedAsync:
+    // OnAfterRender CHỈ chạy khi component đã interactive (không chạy lúc prerender) → không mở kết nối "thừa"
+    // cho bản HTML tĩnh sẽ bị bỏ đi ngay sau đó.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        OrderStatus.Pending => "Chờ pha chế",
-        OrderStatus.Preparing => "Đang pha chế",
-        OrderStatus.Ready => "Sẵn sàng",
-        OrderStatus.Completed => "Hoàn tất",
-        _ => "Đã hủy"
-    };
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _hub = HubFactory.Create();
+
+        // Sự kiện đến trên luồng của SignalR, KHÔNG phải luồng của Blazor → bọc InvokeAsync rồi mới StateHasChanged
+        _hub.On<OrderDto>(OrderHubContract.OrderStatusChanged, updated => InvokeAsync(() =>
+        {
+            if (updated.Id == OrderId)
+            {
+                _order = updated;
+                StateHasChanged();
+            }
+        }));
+
+        // Reconnect = ConnectionId MỚI = mất group cũ → xin vào group order-{id} lại
+        _hub.Reconnected += _ => WatchCurrentOrderAsync();
+        _hub.Reconnecting += _ => InvokeAsync(() => { _live = false; StateHasChanged(); });
+
+        try
+        {
+            await _hub.StartAsync();
+            await WatchCurrentOrderAsync();
+        }
+        catch (Exception ex)
+        {
+            // Bắt mọi lỗi (API tắt, WebSocket bị chặn...): hub lỗi không làm hỏng trang: khách vẫn xem được đơn, chỉ mất phần "tự cập nhật"
+            Logger.LogWarning(ex, "Không kết nối được OrderHub");
+        }
+    }
+
+    private async Task WatchCurrentOrderAsync()
+    {
+        if (_hub is null)
+        {
+            return;
+        }
+
+        // InvokeAsync(tên method trên hub, tham số...) — client GỌI method của server
+        await _hub.InvokeAsync(OrderHubContract.WatchOrder, OrderId);
+        _watchingId = OrderId;
+        await InvokeAsync(() => { _live = true; StateHasChanged(); });
+    }
+
+    // IAsyncDisposable: HubConnection.DisposeAsync là async → component phải implement bản async.
+    // ⚠️ Lỗi hay gặp: không dispose → mỗi lần vào trang mở thêm 1 kết nối WebSocket "mồ côi" tới Api.
+    public async ValueTask DisposeAsync()
+    {
+        if (_hub is not null)
+        {
+            await _hub.DisposeAsync();
+        }
+    }
 }

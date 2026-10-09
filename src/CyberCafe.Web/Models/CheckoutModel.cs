@@ -3,8 +3,12 @@
 // Mỗi attribute [Required], [StringLength], [RegularExpression]... là 1 quy tắc kiểm tra.
 // <DataAnnotationsValidator /> trong Checkout.razor đọc các attribute này, hiển thị lỗi
 // ngay trên form và chỉ gọi OnValidSubmit khi mọi quy tắc đều đạt.
+// Buổi 32–41: form không tự tạo Payment/Order nữa mà chuyển thành PlaceOrderRequest gửi lên API
+// (CreatePayment chuyển xuống Domain thành PaymentFactory, API gọi).
 // ============================================================================
 using System.ComponentModel.DataAnnotations;
+using CyberCafe.Contracts.Orders;
+using CyberCafe.Domain.Orders;
 using CyberCafe.Domain.Payments;
 
 namespace CyberCafe.Web.Models;
@@ -64,15 +68,20 @@ public class CheckoutModel : IValidatableObject
         }
     }
 
-    // Tạo Payment cụ thể theo lựa chọn — phần còn lại của app chỉ thấy Payment (class cha)
+    // 👉 Bước 11 (b40.md): form → request. Chỉ gửi Id món + size + số lượng + MÃ giảm giá; KHÔNG gửi giá.
     /// <summary>
-    /// "Factory method": chuyển lựa chọn trên form thành object Payment cụ thể
-    /// (CashPayment / CardPayment / MomoPayment). Nơi gọi chỉ cần biết kiểu cha Payment.
+    /// Chuyển dữ liệu form + giỏ hàng thành body của POST /api/orders.
+    /// Giá, tổng tiền, số tiền giảm do API tự tính lại từ database (không tin client).
     /// </summary>
-    public Payment CreatePayment(decimal amount) => PaymentMethod switch
+    public PlaceOrderRequest ToRequest(Cart cart, string? discountCode) => new()
     {
-        Domain.Payments.PaymentMethod.Card => new CardPayment(amount, CardNumber!, "Visa/Master"),
-        Domain.Payments.PaymentMethod.Momo => new MomoPayment(amount, PhoneNumber),
-        _ => new CashPayment(amount, amount) // trả tại quầy, khách đưa đủ
+        CustomerName = FullName.Trim(),
+        PhoneNumber = PhoneNumber.Trim(),
+        Items = cart.Items.Select(i => new OrderLineRequest(i.Product.Id, i.Size, i.Quantity)).ToList(),
+        DiscountCode = discountCode,
+        // PaymentMethod đã qua [Required] nên không null; ?? chỉ để compiler yên tâm
+        PaymentMethod = PaymentMethod ?? Domain.Payments.PaymentMethod.Cash,
+        CardNumber = PaymentMethod == Domain.Payments.PaymentMethod.Card ? CardNumber : null,
+        Note = Note
     };
 }

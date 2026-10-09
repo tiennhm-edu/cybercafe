@@ -480,3 +480,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Thư mục tạm cho công cụ (không commit)
+.agent-tmp/
