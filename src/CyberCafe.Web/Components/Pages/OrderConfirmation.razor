@@ -3,13 +3,17 @@
    (Buổi 24–31 · Route parameter + OnParametersSet;
     Buổi 32–35 · đọc đơn từ API; Buổi 33–34 · trạng thái tự cập nhật qua SignalR).
    Khách để trang này mở: barista bấm "Bắt đầu pha" → badge đổi ngay, không cần F5.
+   Buổi 42–47: phải đăng nhập; Api/hub chỉ cho xem đơn CỦA MÌNH (đơn người khác → "Không tìm thấy").
    ========================================================================== *@
 @* {OrderId:int}: route parameter có RÀNG BUỘC kiểu — /orders/abc không khớp route → trang NotFound.
    ⚠️ Lỗi hay gặp: đặt tên property khác tên trong {…} (vd Id) → giá trị không được gán. *@
 @page "/orders/{OrderId:int}"
 @* IAsyncDisposable: trang giữ 1 HubConnection, rời trang phải đóng (DisposeAsync) *@
 @implements IAsyncDisposable
+@* [Authorize] không kèm role: đăng nhập là đủ vào trang; quyền xem TỪNG đơn do Api quyết định *@
+@attribute [Authorize]
 @inject OrderApiClient OrderApi
+@inject AuthSession Session
 @inject OrderHubConnectionFactory HubFactory
 @inject ILogger<OrderConfirmation> Logger
 
@@ -137,7 +141,7 @@ else
             return;
         }
 
-        _hub = HubFactory.Create();
+        _hub = HubFactory.Create(() => Session.GetAccessTokenAsync()); // hub đòi JWT (Buổi 42–47)
 
         // Sự kiện đến trên luồng của SignalR, KHÔNG phải luồng của Blazor → bọc InvokeAsync rồi mới StateHasChanged
         _hub.On<OrderDto>(OrderHubContract.OrderStatusChanged, updated => InvokeAsync(() =>

@@ -2,6 +2,7 @@
 
   <!--
     CyberCafe.Api (Buổi 32–41): ASP.NET Core Web API (controllers) + EF Core SQL Server + SignalR.
+    Buổi 42–47: JWT + BCrypt, Redis cache, rate limiting (có sẵn trong ASP.NET Core, không cần package).
     Version package nằm trong Directory.Packages.props (Central Package Management).
   -->
   <PropertyGroup>
@@ -18,6 +19,10 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Scalar.AspNetCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <!-- Buổi 42–47 -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="BCrypt.Net-Next" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
     <!-- Design: chỉ dùng lúc chạy lệnh dotnet ef (migrations), không đóng gói vào app -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>

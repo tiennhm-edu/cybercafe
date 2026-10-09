@@ -4,6 +4,7 @@
 // bằng migration. Không có class "entity" riêng: EF lưu thẳng domain nhờ Fluent API
 // (thư mục Configurations/) — domain không phải gắn [Key], [Table]... nên vẫn là C# thuần.
 // ============================================================================
+using CyberCafe.Api.Auth;
 using CyberCafe.Domain.Orders;
 using CyberCafe.Domain.Products;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,14 @@ public class CyberCafeDbContext(DbContextOptions<CyberCafeDbContext> options) : 
 
     /// <summary>Dòng đơn (bảng OrderItems). Thường đi qua Order.Items; DbSet riêng để kiểm tra "món đã có trong đơn".</summary>
     public DbSet<OrderItem> OrderItems => this.Set<OrderItem>();
+
+    // Buổi 42–47: tài khoản đăng nhập + refresh token (bảng Users, RefreshTokens)
+
+    /// <summary>Tài khoản đăng nhập.</summary>
+    public DbSet<User> Users => this.Set<User>();
+
+    /// <summary>Refresh token đã phát (chỉ lưu hash).</summary>
+    public DbSet<RefreshToken> RefreshTokens => this.Set<RefreshToken>();
 
     /// <summary>Cấu hình mô hình bằng Fluent API.</summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)

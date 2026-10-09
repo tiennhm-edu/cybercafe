@@ -1,0 +1,88 @@
+@* ==========================================================================
+   Register.razor — trang đăng ký khách hàng /register (Buổi 42–47).
+   Form KHÔNG có ô chọn vai trò: Api luôn gán Customer (ai cũng tự đăng ký làm Admin thì hỏng).
+   Đăng ký thành công = đăng nhập luôn (Api trả cặp token).
+   ========================================================================== *@
+@page "/register"
+@* Trang công khai (không [Authorize]); AuthApiClient KHÔNG gắn Bearer token *@
+@inject AuthApiClient AuthApi
+@inject AuthSession Session
+@inject NavigationManager Navigation
+
+<PageTitle>CyberCafe — Đăng ký</PageTitle>
+
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <h1>Đăng ký</h1>
+
+        @* Model = RegisterRequest (Contracts): quy tắc mật khẩu (≥ 8 ký tự, có chữ và số) kiểm tra ở cả 2 phía *@
+        <EditForm Model="_model" OnValidSubmit="RegisterAsync" FormName="register">
+            <DataAnnotationsValidator />
+
+            <div class="mb-2">
+                <label class="form-label" for="fullName">Họ tên</label>
+                <InputText id="fullName" class="form-control" @bind-Value="_model.FullName" />
+                <ValidationMessage For="() => _model.FullName" class="text-danger small" />
+            </div>
+            <div class="mb-2">
+                <label class="form-label" for="email">Email</label>
+                <InputText id="email" type="email" class="form-control" @bind-Value="_model.Email" autocomplete="username" />
+                <ValidationMessage For="() => _model.Email" class="text-danger small" />
+            </div>
+            <div class="mb-2">
+                <label class="form-label" for="phone">Số điện thoại (tùy chọn)</label>
+                <InputText id="phone" class="form-control" @bind-Value="_model.PhoneNumber" placeholder="09xxxxxxxx" />
+                <ValidationMessage For="() => _model.PhoneNumber" class="text-danger small" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="password">Mật khẩu</label>
+                @* autocomplete="new-password": trình duyệt gợi ý tạo mật khẩu mạnh *@
+                <InputText id="password" type="password" class="form-control" @bind-Value="_model.Password" autocomplete="new-password" />
+                <ValidationMessage For="() => _model.Password" class="text-danger small" />
+            </div>
+
+            @* Lỗi từ Api (email trùng 409, quá nhiều lần 429...) — DataAnnotations chỉ bắt được lỗi định dạng *@
+            @if (_error is not null)
+            {
+                <div class="alert alert-danger py-2">@_error</div>
+            }
+
+            @* disabled khi đang gửi: bấm 2 lần sẽ đăng ký 2 lần → lần 2 nhận 409 khó hiểu *@
+            <button type="submit" class="btn btn-success w-100" disabled="@_busy">Tạo tài khoản</button>
+        </EditForm>
+
+        <p class="mt-3 small">Đã có tài khoản? <a href="login">Đăng nhập</a></p>
+    </div>
+</div>
+
+@code {
+    // Model của EditForm = RegisterRequest (Contracts) — không có property Role nào để client tự gán
+    private readonly RegisterRequest _model = new();
+    private string? _error;
+    // true trong lúc chờ Api → khóa nút submit
+    private bool _busy;
+
+    private async Task RegisterAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            // Ô SĐT để trống → gửi null (regex [RegularExpression] bỏ qua null, nhưng chuỗi rỗng thì không)
+            _model.PhoneNumber = string.IsNullOrWhiteSpace(_model.PhoneNumber) ? null : _model.PhoneNumber.Trim();
+            AuthResponse response = await AuthApi.RegisterAsync(_model);
+            // Api trả luôn cặp token → đăng nhập ngay, không bắt người dùng gõ lại mật khẩu
+            await Session.SignInAsync(response);
+            Navigation.NavigateTo("menu");
+        }
+        catch (ApiException ex)
+        {
+            // 409: email đã được đăng ký; 400: dữ liệu sai (đã kiểm tra trên form nhưng Api kiểm tra lại)
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

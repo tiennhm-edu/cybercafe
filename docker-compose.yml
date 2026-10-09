@@ -1,11 +1,11 @@
 # ============================================================================
-# Hạ tầng phát triển cục bộ cho CyberCafe (Buổi 36–41 · Docker Compose).
-#   docker compose up -d            # SQL Server 2022
+# Hạ tầng phát triển cục bộ cho CyberCafe (Buổi 36–41 · Docker Compose; Buổi 42–47 thêm Redis).
+#   docker compose up -d            # SQL Server 2022 + Redis 7
 #   docker compose ps               # đợi cột STATUS = healthy
 #   docker compose down             # dừng (dữ liệu vẫn còn trong volume)
 #   docker compose down -v          # dừng + XÓA dữ liệu (làm lại từ đầu)
 # Mật khẩu / cổng lấy từ file .env (copy từ .env.example). Không có .env → dùng giá trị mặc định sau dấu ":-".
-# Cổng host mặc định 1434 (không phải 1433) để chạy song song với SQL Server của lab nếu đang bật.
+# Cổng host mặc định 1434 / 6380 (không phải 1433 / 6379) để chạy song song với container của lab nếu đang bật.
 # ============================================================================
 name: cybercafe
 
@@ -29,6 +29,18 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+
+  # Buổi 42–47: Redis làm distributed cache cho thực đơn (Api dùng khi Redis:Enabled = true).
+  # Không mount volume: cache mất khi xóa container là CHẤP NHẬN ĐƯỢC — database mới là nguồn sự thật.
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
 volumes:
   cybercafe-sql:

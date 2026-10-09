@@ -1,6 +1,7 @@
 // ============================================================================
 // OrdersEndpointTests.cs — test tích hợp /api/orders (Buổi 32–41 · đặt hàng, luồng trạng thái, Include).
 // Mỗi test 1 factory riêng → database InMemory riêng, Id đơn luôn bắt đầu từ 1.
+// Buổi 42–47: khách (customer) đặt đơn, barista đổi trạng thái — quyền chi tiết xem AuthorizationTests.
 // ============================================================================
 using System.Net;
 using System.Net.Http.Json;
@@ -15,19 +16,20 @@ namespace CyberCafe.Api.Tests;
 public class OrdersEndpointTests : IAsyncLifetime
 {
     private readonly CyberCafeApiFactory _factory = new();
-    private HttpClient _client = default!;
+    private HttpClient _client = default!;   // khách hàng (Customer) seed sẵn
+    private HttpClient _barista = default!;  // nhân viên quầy
 
-    public Task InitializeAsync()
+    public async Task InitializeAsync()
     {
-        this._client = this._factory.CreateClient();
-        return Task.CompletedTask;
+        this._client = await this._factory.CustomerAsync();
+        this._barista = await this._factory.BaristaAsync();
     }
 
     public async Task DisposeAsync() => await this._factory.DisposeAsync();
 
     private Task<HttpResponseMessage> PutStatusAsync(int id, string status) =>
-        // Gửi JSON "thô" để thử cả giá trị enum không hợp lệ
-        this._client.PutAsync($"/api/orders/{id}/status", JsonContent.Create(new { status }));
+        // Gửi JSON "thô" để thử cả giá trị enum không hợp lệ. Đổi trạng thái là việc của barista.
+        this._barista.PutAsync($"/api/orders/{id}/status", JsonContent.Create(new { status }));
 
     // Kiểm tra: đặt hàng → 201, server tự tính tiền theo size + giảm giá, lưu đúng dòng, báo barista đúng 1 lần.
     [Fact]
@@ -136,7 +138,7 @@ public class OrdersEndpointTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.BadRequest, (await this.PutStatusAsync(order.Id, "Flying")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,
-            (await this._client.PutAsync($"/api/orders/{order.Id}/status", JsonContent.Create(new { }))).StatusCode);
+            (await this._barista.PutAsync($"/api/orders/{order.Id}/status", JsonContent.Create(new { }))).StatusCode);
     }
 
     // Kiểm tra: đơn không tồn tại → 404 cho cả GET, đổi trạng thái và hủy.
@@ -144,11 +146,11 @@ public class OrdersEndpointTests : IAsyncLifetime
     public async Task UnknownOrder_Returns404()
     {
         Assert.Equal(HttpStatusCode.NotFound, (await this._client.GetAsync("/api/orders/42")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await this.PutStatusAsync(42, "Preparing")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await this.PutStatusAsync(42, "Preparing")).StatusCode);   // barista
         Assert.Equal(HttpStatusCode.NotFound, (await this._client.PostAsync("/api/orders/42/cancel", null)).StatusCode);
     }
 
-    // Kiểm tra: hủy được khi đang pha; đơn đã Ready thì không hủy được (409).
+    // Kiểm tra: NHÂN VIÊN hủy được khi đang pha; đơn đã Ready thì không hủy được (409).
     [Fact]
     public async Task Cancel_AllowedWhilePreparing_RejectedWhenReady()
     {
@@ -158,8 +160,8 @@ public class OrdersEndpointTests : IAsyncLifetime
         await this.PutStatusAsync(second.Id, "Preparing");
         await this.PutStatusAsync(second.Id, "Ready");
 
-        HttpResponseMessage cancelFirst = await this._client.PostAsync($"/api/orders/{first.Id}/cancel", null);
-        HttpResponseMessage cancelSecond = await this._client.PostAsync($"/api/orders/{second.Id}/cancel", null);
+        HttpResponseMessage cancelFirst = await this._barista.PostAsync($"/api/orders/{first.Id}/cancel", null);
+        HttpResponseMessage cancelSecond = await this._barista.PostAsync($"/api/orders/{second.Id}/cancel", null);
 
         Assert.Equal(OrderStatus.Cancelled, (await cancelFirst.ReadAsync<OrderDto>()).Status);
         Assert.Equal(HttpStatusCode.Conflict, cancelSecond.StatusCode);
@@ -173,8 +175,8 @@ public class OrdersEndpointTests : IAsyncLifetime
         OrderDto cancelled = await this._client.PlaceAsync();
         await this._client.PostAsync($"/api/orders/{cancelled.Id}/cancel", null);
 
-        PagedResult<OrderDto> page = (await this._client.GetFromJsonAsync<PagedResult<OrderDto>>("/api/orders", CyberCafeApiFactory.Json))!;
-        PagedResult<OrderDto> onlyCancelled = (await this._client.GetFromJsonAsync<PagedResult<OrderDto>>("/api/orders?status=Cancelled", CyberCafeApiFactory.Json))!;
+        PagedResult<OrderDto> page = (await this._barista.GetFromJsonAsync<PagedResult<OrderDto>>("/api/orders", CyberCafeApiFactory.Json))!;
+        PagedResult<OrderDto> onlyCancelled = (await this._barista.GetFromJsonAsync<PagedResult<OrderDto>>("/api/orders?status=Cancelled", CyberCafeApiFactory.Json))!;
 
         Assert.Equal(active.Id, Assert.Single(page.Items).Id);
         Assert.Equal(cancelled.Id, Assert.Single(onlyCancelled.Items).Id);

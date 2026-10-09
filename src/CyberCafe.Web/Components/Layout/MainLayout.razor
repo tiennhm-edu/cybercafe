@@ -1,5 +1,6 @@
 @* ==========================================================================
-   MainLayout.razor — layout chung của mọi trang (Buổi 23 · Layout; Buổi 24–31 thêm CartSummary).
+   MainLayout.razor — layout chung của mọi trang (Buổi 23 · Layout; Buổi 24–31 thêm CartSummary;
+   Buổi 42–47 thêm LoginDisplay).
    Layout là "khuôn": sidebar + thanh trên cùng giữ nguyên, chỉ phần @Body
    thay đổi theo trang. Routes.razor chọn layout này làm DefaultLayout.
    ========================================================================== *@
@@ -17,6 +18,8 @@
             @* CartSummary (Shared/): badge giỏ hàng. Nằm trong layout nên hiện ở MỌI trang,
                tự cập nhật nhờ subscribe CartState.OnChange (xem CartSummary.razor). *@
             <CartSummary />
+            @* Buổi 42–47: tên người dùng + nút đăng nhập/đăng xuất *@
+            <LoginDisplay />
         </div>
 
         <article class="content px-4">

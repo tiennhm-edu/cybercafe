@@ -3,9 +3,11 @@
    - Bảng món có tìm kiếm + lọc loại + PHÂN TRANG phía server (GET /api/products?page=&pageSize=).
    - Form thêm/sửa dùng chung ProductRequest (Contracts) làm Model → cùng DataAnnotations với Api.
    - Xóa có bước xác nhận ngay trên dòng (không cần JS confirm()).
-   Buổi 42–47: chỉ tài khoản Admin vào được trang này.
+   Buổi 42–47: chỉ tài khoản Admin vào được trang này; MenuApiClient tự kèm token Admin khi ghi.
    ========================================================================== *@
 @page "/admin/menu"
+@* Chặn ở GIAO DIỆN (người không phải Admin không thấy trang); chặn THẬT ở Api ([Authorize(Policy = ManageMenu)]) *@
+@attribute [Authorize(Roles = Roles.Admin)]
 @* Trang chỉ cần MenuApiClient: không biết URL, JSON hay mã lỗi HTTP — mọi thứ đó nằm trong typed client *@
 @inject MenuApiClient MenuApi
 

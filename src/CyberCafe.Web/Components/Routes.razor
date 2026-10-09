@@ -1,5 +1,6 @@
 ﻿@* ==========================================================================
-   Routes.razor — bộ định tuyến (file template, Buổi 23 · Routing).
+   Routes.razor — bộ định tuyến (file template, Buổi 23 · Routing;
+   Buổi 42–47: RouteView → AuthorizeRouteView để kiểm tra [Authorize] trước khi render trang).
    Router quét assembly tìm mọi component có directive @page "/..." và chọn
    component khớp với URL hiện tại. Không cần đăng ký route bằng tay.
    ========================================================================== *@
@@ -8,7 +9,27 @@
     @* Found: URL khớp → routeData chứa component cần render + route parameter (vd {OrderId}). *@
     <Found Context="routeData">
         @* RouteView render trang bên trong layout mặc định MainLayout (trang có thể đổi bằng @layout). *@
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            <NotAuthorized>
+                @* context = AuthenticationState: phân biệt "chưa đăng nhập" (→ /login) và "thiếu quyền" (báo lỗi) *@
+                @if (context.User.Identity?.IsAuthenticated != true)
+                {
+                    <RedirectToLogin />
+                }
+                else
+                {
+                    <div class="alert alert-danger m-4">
+                        <h1 class="h5">Không có quyền truy cập</h1>
+                        Tài khoản <strong>@context.User.Identity?.Name</strong> không được vào trang này.
+                        <a href="">Về trang chủ</a>
+                    </div>
+                }
+            </NotAuthorized>
+            @* Hiện trong lúc AuthenticationStateProvider đang đọc token (bất đồng bộ) *@
+            <Authorizing>
+                <p class="m-4 text-muted">Đang kiểm tra đăng nhập...</p>
+            </Authorizing>
+        </AuthorizeRouteView>
         @* Sau mỗi lần chuyển trang, đặt focus vào thẻ <h1> đầu tiên (hỗ trợ trình đọc màn hình). *@
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>

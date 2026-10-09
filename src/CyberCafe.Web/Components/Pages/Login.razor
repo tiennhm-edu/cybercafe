@@ -1,0 +1,93 @@
+@* ==========================================================================
+   Login.razor — trang đăng nhập /login (Buổi 42–47 · JWT từ Blazor Server).
+   Luồng: EditForm (LoginRequest) → AuthApiClient.LoginAsync → Api trả AuthResponse (access + refresh token)
+          → AuthSession.SignInAsync (lưu sessionStorage + báo Changed) → quay về returnUrl.
+   ========================================================================== *@
+@page "/login"
+@inject AuthApiClient AuthApi
+@inject AuthSession Session
+@inject NavigationManager Navigation
+@* IWebHostEnvironment: chỉ hiện gợi ý tài khoản mẫu ở môi trường Development *@
+@inject IWebHostEnvironment Environment
+
+<PageTitle>CyberCafe — Đăng nhập</PageTitle>
+
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <h1>Đăng nhập</h1>
+
+        @* Model = LoginRequest (Contracts): [Required], [EmailAddress] giống hệt Api *@
+        <EditForm Model="_model" OnValidSubmit="LoginAsync" FormName="login">
+            <DataAnnotationsValidator />
+
+            <div class="mb-3">
+                <label class="form-label" for="email">Email</label>
+                <InputText id="email" type="email" class="form-control" @bind-Value="_model.Email" autocomplete="username" />
+                <ValidationMessage For="() => _model.Email" class="text-danger small" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="password">Mật khẩu</label>
+                @* type="password": trình duyệt che ký tự; autocomplete giúp trình quản lý mật khẩu điền đúng ô *@
+                <InputText id="password" type="password" class="form-control" @bind-Value="_model.Password" autocomplete="current-password" />
+                <ValidationMessage For="() => _model.Password" class="text-danger small" />
+            </div>
+
+            @if (_error is not null)
+            {
+                <div class="alert alert-danger py-2">@_error</div>
+            }
+
+            <button type="submit" class="btn btn-primary w-100" disabled="@_busy">Đăng nhập</button>
+        </EditForm>
+
+        <p class="mt-3 small">Chưa có tài khoản? <a href="register">Đăng ký</a></p>
+
+        @if (Environment.IsDevelopment())
+        {
+            @* Tài khoản mẫu do DevAccountSeeder tạo — CHỈ có ở máy dev, mật khẩu giả trong appsettings.Development.json *@
+            <div class="alert alert-secondary small">
+                <strong>Tài khoản dev</strong> (mật khẩu <code>Dev@12345</code>):
+                <code>admin@cybercafe.local</code>, <code>barista@cybercafe.local</code>, <code>customer@cybercafe.local</code>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    // [SupplyParameterFromQuery]: đọc ?returnUrl=... trên URL vào property
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    private readonly LoginRequest _model = new();
+    private string? _error;
+    private bool _busy;
+
+    // 👉 Bước 13 (b47.md)
+    private async Task LoginAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            AuthResponse response = await AuthApi.LoginAsync(_model);
+            await Session.SignInAsync(response); // → AuthenticationStateProvider báo đổi → menu đổi theo vai trò
+            Navigation.NavigateTo(SafeReturnUrl());
+        }
+        catch (ApiException ex)
+        {
+            // 401: "Sai email hoặc mật khẩu"; 429: thử quá nhiều lần (rate limit của Api)
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // ⚠️ Lỗi hay gặp (open redirect): NavigateTo(ReturnUrl) thẳng → kẻ xấu gửi link
+    //    /login?returnUrl=https://trang-gia-mao → đăng nhập xong bị đưa sang trang lừa đảo. Chỉ nhận đường dẫn NỘI BỘ.
+    private string SafeReturnUrl() =>
+        string.IsNullOrWhiteSpace(ReturnUrl) || ReturnUrl.Contains("://") || ReturnUrl.StartsWith("//")
+            ? ""
+            : ReturnUrl.TrimStart('/');
+}

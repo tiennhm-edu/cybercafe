@@ -11,6 +11,10 @@
    - Mặc định có PRERENDER: server render HTML tĩnh 1 lần trước (để trang hiện
      nhanh, tốt cho SEO), sau đó circuit kết nối và component được tạo LẠI ở chế
      độ interactive → OnInitialized/OnInitializedAsync chạy 2 lần (xem Menu.razor).
+   Buổi 42–47: TẮT prerender (InteractiveServerRenderMode(prerender: false)).
+     Phiên đăng nhập nằm trong sessionStorage (đọc bằng JS interop). Lúc prerender CHƯA có trình duyệt
+     → không đọc được token → trang [Authorize] bị đẩy về /login rồi mới "nhớ ra" đã đăng nhập.
+     Tắt prerender: component chỉ khởi tạo 1 lần trong circuit, đọc token ngay từ đầu (giống lab blazor b34).
    ========================================================================== *@
 <!DOCTYPE html>
 <html lang="vi">
@@ -29,16 +33,21 @@
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
     @* HeadOutlet: chỗ để <PageTitle> của từng trang "đẩy" tiêu đề lên thẻ <head>. *@
-    <HeadOutlet @rendermode="InteractiveServer" />
+    <HeadOutlet @rendermode="ServerNoPrerender" />
 </head>
 
 <body>
     @* Routes: component Router (Routes.razor). Đặt render mode ở đây = cả app chạy Interactive Server. *@
     @* ⚠️ Lỗi hay gặp: xóa @rendermode ở đây → trang chỉ là HTML tĩnh, bấm nút @onclick không có tác dụng gì. *@
-    <Routes @rendermode="InteractiveServer" />
+    <Routes @rendermode="ServerNoPrerender" />
     <ReconnectModal />
     @* blazor.web.js: script phía trình duyệt mở kết nối SignalR và áp dụng các thay đổi DOM do server gửi về. *@
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>
 
 </html>
+
+@code {
+    // Interactive Server KHÔNG prerender (Buổi 42–47) — xem giải thích ở đầu file
+    private static readonly IComponentRenderMode ServerNoPrerender = new InteractiveServerRenderMode(prerender: false);
+}

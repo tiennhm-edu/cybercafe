@@ -102,9 +102,9 @@ else
     // Lifecycle 1: chạy 1 lần khi component khởi tạo — chỗ để load dữ liệu
     // Blazor render 1 lần khi gặp await đầu tiên (lúc này _products còn null → "Đang tải..."),
     // rồi tự render lại khi Task hoàn tất.
-    // ⚠️ Vì App.razor bật PRERENDER: hàm này chạy 2 LẦN — 1 lần khi server prerender HTML tĩnh,
-    // 1 lần nữa khi circuit SignalR kết nối (component được tạo mới). Bình thường, không phải bug;
-    // muốn tránh tải 2 lần thì dùng PersistentComponentState (giới thiệu sau).
+    // ⚠️ Buổi 24–41 App.razor bật PRERENDER: hàm này chạy 2 LẦN — 1 lần khi server prerender HTML tĩnh,
+    // 1 lần nữa khi circuit SignalR kết nối (component được tạo mới). Bình thường, không phải bug.
+    // Buổi 42–47 tắt prerender (để đọc token từ sessionStorage) → giờ chỉ còn chạy 1 lần.
     protected override Task OnInitializedAsync() => LoadAsync();
 
     // Tách thành method riêng để nút "Thử lại" gọi lại được

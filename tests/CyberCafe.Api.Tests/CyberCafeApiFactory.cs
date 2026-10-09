@@ -4,6 +4,8 @@
 // trên TestServer (không mở cổng mạng). Ta chỉ thay 2 thứ:
 //   1) SQL Server → EF Core InMemory (mỗi factory 1 database riêng, tên ngẫu nhiên).
 //   2) IOrderNotifier → bản ghi lại (để kiểm tra "đã báo barista chưa") — trừ khi test hub thật.
+//   3) (Buổi 42–47) Cấu hình test: khóa JWT giả, seed 3 tài khoản dev, BCrypt work factor 4 (chạy nhanh),
+//      rate limit đăng nhập rất cao (trừ test rate limit), cache trong RAM (không cần Redis).
 // ⚠️ InMemory KHÔNG phải SQL thật: không kiểm tra khóa ngoại, Contains phân biệt hoa/thường,
 //    không chạy được SQL thô (stored procedure) → phần SP được kiểm thử tay với Docker (docs/sessions/b40.md).
 // ============================================================================
@@ -18,6 +20,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -33,7 +36,16 @@ public class CyberCafeApiFactory : WebApplicationFactory<Program>
         Converters = { new JsonStringEnumConverter() },
     };
 
+    /// <summary>Mật khẩu của 3 tài khoản dev seed sẵn (giá trị giả, chỉ dùng trong test).</summary>
+    public const string DevPassword = "Test@12345";
+
     private readonly string _databaseName = $"CyberCafeTests-{Guid.NewGuid()}";
+
+    // "Gốc" lưu trữ InMemory dùng chung giữa DbContext của app và DbContext tạo tay trong CreateHost
+    private readonly InMemoryDatabaseRoot _databaseRoot = new();
+
+    /// <summary>Số lần đăng nhập / phút / IP (test rate limit đặt thấp).</summary>
+    public int LoginPermitLimit { get; init; } = 1000;
 
     /// <summary>true = giữ SignalROrderNotifier thật (test hub); false = dùng bản ghi lại.</summary>
     public bool UseRealNotifier { get; init; }
@@ -44,6 +56,12 @@ public class CyberCafeApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.UseSetting("Jwt:Key", "test-only-FAKE-jwt-signing-key-0123456789abcdef");
+        builder.UseSetting("Seed:DevAccounts", "true");
+        builder.UseSetting("Seed:DevPassword", DevPassword);
+        builder.UseSetting("Auth:BCryptWorkFactor", "4"); // 4 = mức thấp nhất của BCrypt → test nhanh
+        builder.UseSetting("RateLimiting:LoginPermitLimit", this.LoginPermitLimit.ToString());
+        builder.UseSetting("Redis:Enabled", "false");
 
         builder.ConfigureTestServices(services =>
         {
@@ -52,7 +70,7 @@ public class CyberCafeApiFactory : WebApplicationFactory<Program>
             // nếu không sẽ lỗi "Services for database providers 'SqlServer', 'InMemory' have been registered".
             services.RemoveAll<DbContextOptions<CyberCafeDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<CyberCafeDbContext>>();
-            services.AddDbContext<CyberCafeDbContext>(options => options.UseInMemoryDatabase(this._databaseName));
+            services.AddDbContext<CyberCafeDbContext>(options => options.UseInMemoryDatabase(this._databaseName, this._databaseRoot));
 
             if (!this.UseRealNotifier)
             {
@@ -64,13 +82,19 @@ public class CyberCafeApiFactory : WebApplicationFactory<Program>
 
     protected override IHost CreateHost(IHostBuilder builder)
     {
-        IHost host = base.CreateHost(builder);
-
         // EnsureCreated: tạo "database" InMemory theo model + nạp dữ liệu HasData (8 món mẫu).
         // (Với SQL Server thật ta dùng migration; InMemory không có migration.)
-        using IServiceScope scope = host.Services.CreateScope();
-        scope.ServiceProvider.GetRequiredService<CyberCafeDbContext>().Database.EnsureCreated();
-        return host;
+        // Phải chạy TRƯỚC khi host khởi động: Program.cs seed tài khoản dev lúc khởi động — nếu nó chạm DB trước,
+        // InMemory coi như "đã tạo" và EnsureCreated sau đó KHÔNG nạp HasData nữa (thực đơn rỗng).
+        DbContextOptions<CyberCafeDbContext> options = new DbContextOptionsBuilder<CyberCafeDbContext>()
+            .UseInMemoryDatabase(this._databaseName, this._databaseRoot)
+            .Options;
+        using (CyberCafeDbContext db = new(options))
+        {
+            db.Database.EnsureCreated();
+        }
+
+        return base.CreateHost(builder);
     }
 
     /// <summary>Chạy 1 đoạn code với DbContext thật của app (đọc/ghi thẳng DB trong test).</summary>

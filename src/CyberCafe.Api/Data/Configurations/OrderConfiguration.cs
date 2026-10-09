@@ -5,6 +5,7 @@
 //   Orders(Id, Status, CreatedAt, Note, CustomerName, CustomerPhone, CustomerLoyaltyPoints, DiscountId, PaymentId)
 //   OrderItems(Id, OrderId → Orders, ProductId → Products, Size, Quantity, UnitPrice)
 // ============================================================================
+using CyberCafe.Api.Auth;
 using CyberCafe.Domain.Orders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -60,7 +61,16 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         // Khóa ngoại DiscountId / PaymentId cũng là shadow property, đặt ở phía Orders.
         builder.HasOne(o => o.Discount).WithOne().HasForeignKey<Order>("DiscountId");
         builder.HasOne(o => o.Payment).WithOne().HasForeignKey<Order>("PaymentId");
+
+        // Buổi 42–47: đơn thuộc về tài khoản nào → cột Orders.UserId (SHADOW property, domain không biết User).
+        // Nullable: đơn tạo trước khi có đăng nhập (b40) vẫn hợp lệ. Restrict: không xóa user đang có đơn.
+        // Đọc/ghi bằng EF.Property<int?>(o, OwnerUserId) / db.Entry(order).Property(OwnerUserId).
+        builder.Property<int?>(OwnerUserId);
+        builder.HasOne<User>().WithMany().HasForeignKey(OwnerUserId).OnDelete(DeleteBehavior.Restrict);
     }
+
+    /// <summary>Tên shadow property khóa ngoại tới Users (dùng lại trong controller và hub).</summary>
+    public const string OwnerUserId = "UserId";
 }
 
 /// <summary>Cấu hình bảng OrderItems.</summary>

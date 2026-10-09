@@ -2,6 +2,8 @@
 // OrderHubTests.cs — test SignalR THẬT qua TestServer (Buổi 33–34).
 // HubConnection (.NET client — giống Web dùng) kết nối tới hub chạy trong WebApplicationFactory.
 // Transport LongPolling: đi qua HttpMessageHandler của TestServer (không cần cổng mạng thật).
+// Buổi 42–47: hub đòi JWT → AccessTokenProvider; khách không vào được group barista,
+//             không theo dõi được đơn của người khác (IDOR trên hub).
 // ============================================================================
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
@@ -18,9 +20,10 @@ namespace CyberCafe.Api.Tests;
 
 public class OrderHubTests
 {
-    private static HubConnection Connect(TestServer server) => new HubConnectionBuilder()
+    private static HubConnection Connect(TestServer server, string? accessToken) => new HubConnectionBuilder()
         .WithUrl(new Uri(server.BaseAddress, OrderHubContract.Path.TrimStart('/')), o =>
         {
+            o.AccessTokenProvider = () => Task.FromResult(accessToken);
             o.Transports = HttpTransportType.LongPolling;
             o.HttpMessageHandlerFactory = _ => server.CreateHandler(); // gửi qua TestServer thay vì mạng
         })
@@ -32,10 +35,13 @@ public class OrderHubTests
     public async Task Baristas_ReceiveOrderPlaced_And_Watcher_ReceivesStatusChanged()
     {
         await using CyberCafeApiFactory factory = new() { UseRealNotifier = true };
-        HttpClient client = factory.CreateClient(); // khởi động TestServer
+        HttpClient client = await factory.CustomerAsync(); // khởi động TestServer + đăng nhập khách
+        HttpClient baristaHttp = factory.CreateClient();
+        string baristaToken = (await baristaHttp.LoginAsync(Auth.DevAccountSeeder.BaristaEmail)).AccessToken;
+        string customerToken = client.DefaultRequestHeaders.Authorization!.Parameter!;
 
-        await using HubConnection barista = Connect(factory.Server);
-        await using HubConnection customer = Connect(factory.Server);
+        await using HubConnection barista = Connect(factory.Server, baristaToken);
+        await using HubConnection customer = Connect(factory.Server, customerToken);
 
         // TaskCompletionSource: "hứa" sẽ có kết quả khi sự kiện tới → test await được với timeout
         TaskCompletionSource<OrderDto> placed = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -52,7 +58,8 @@ public class OrderHubTests
 
         await customer.StartAsync();
         await customer.InvokeAsync(OrderHubContract.WatchOrder, order.Id);
-        await client.PutAsync($"/api/orders/{order.Id}/status",
+        baristaHttp.DefaultRequestHeaders.Authorization = new("Bearer", baristaToken);
+        await baristaHttp.PutAsync($"/api/orders/{order.Id}/status",
             JsonContent.Create(new { status = "Preparing" }));
 
         Assert.Equal(OrderStatus.Preparing, (await changed.Task.WaitAsync(TimeSpan.FromSeconds(10))).Status);

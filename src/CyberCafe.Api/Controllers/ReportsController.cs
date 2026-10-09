@@ -1,9 +1,11 @@
 // ============================================================================
-// ReportsController.cs — báo cáo /api/reports (Buổi 36–41 · stored procedure).
+// ReportsController.cs — báo cáo /api/reports (Buổi 36–41 · stored procedure; Buổi 42–47 · chỉ Admin).
 // Controller mỏng: validate tham số rồi giao cho RevenueReportService.
 // ============================================================================
+using CyberCafe.Api.Auth;
 using CyberCafe.Api.Reports;
 using CyberCafe.Contracts.Reports;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CyberCafe.Api.Controllers;
@@ -11,6 +13,7 @@ namespace CyberCafe.Api.Controllers;
 /// <summary>Báo cáo kinh doanh.</summary>
 [ApiController]
 [Route("api/reports")]
+[Authorize(Policy = Policies.ManageMenu)] // doanh thu là dữ liệu nhạy cảm: chỉ Admin
 public class ReportsController(RevenueReportService reports) : ControllerBase
 {
     /// <summary>Doanh thu theo ngày trong khoảng [from, to] (tối đa 366 ngày). Mặc định: 7 ngày gần nhất.</summary>

@@ -1,0 +1,16 @@
+@* ==========================================================================
+   RedirectToLogin.razor — chuyển sang /login kèm returnUrl (Buổi 42–47).
+   Routes.razor render component này khi trang [Authorize] gặp người CHƯA đăng nhập.
+   Đăng nhập xong, trang Login đưa người dùng về đúng trang đang định vào.
+   ========================================================================== *@
+@inject NavigationManager Navigation
+
+@code {
+    protected override void OnInitialized()
+    {
+        // ToBaseRelativePath: "http://localhost:5170/checkout" → "checkout"
+        string returnUrl = Navigation.ToBaseRelativePath(Navigation.Uri);
+        // ⚠️ Escape returnUrl: URL chứa "?" hoặc "&" sẽ làm vỡ query string của /login
+        Navigation.NavigateTo($"login?returnUrl={Uri.EscapeDataString(returnUrl)}");
+    }
+}

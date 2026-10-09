@@ -6,9 +6,13 @@
    Luồng: form hợp lệ → CheckoutModel.ToRequest(giỏ, mã giảm giá) → POST /api/orders
           (API tự tính tiền + lưu SQL Server + báo barista qua SignalR)
           → CartState.Clear → chuyển tới /orders/{id}.
+   Buổi 42–47: chỉ khách (Customer) đặt được; họ tên/SĐT điền sẵn từ phiên đăng nhập.
    ========================================================================== *@
 @page "/checkout"
+@* Chưa đăng nhập → RedirectToLogin (giỏ hàng vẫn còn vì CartState sống theo circuit) *@
+@attribute [Authorize(Roles = Roles.Customer)]
 @inject CartState CartState
+@inject AuthSession Session
 @inject OrderApiClient OrderApi
 @* NavigationManager: service có sẵn của Blazor để đọc URL hiện tại và chuyển trang bằng code *@
 @inject NavigationManager Navigation
@@ -118,6 +122,16 @@ else
     private readonly CheckoutModel _model = new();
     private string? _error;
     private bool _submitting;
+
+    // Điền sẵn họ tên / SĐT từ phiên đăng nhập (người dùng vẫn sửa được, vd đặt hộ người khác)
+    protected override async Task OnInitializedAsync()
+    {
+        if (await Session.GetAsync() is { } session)
+        {
+            _model.FullName = session.FullName;
+            _model.PhoneNumber = session.PhoneNumber ?? string.Empty;
+        }
+    }
 
     // Chỉ chạy khi DataAnnotations (và IValidatableObject) đều hợp lệ.
     // async Task: EditForm chờ hàm xong; trong lúc chờ API, nút bị disabled (_submitting).

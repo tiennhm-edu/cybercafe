@@ -5,11 +5,15 @@
    - Bấm nút → PUT /api/orders/{id}/status (REST); Api broadcast OrderStatusChanged
      → MỌI màn hình barista + trang của khách cùng cập nhật.
    Mở 2 tab: 1 tab /barista, 1 tab đặt hàng → thấy đơn "bay" sang quầy ngay lập tức.
+   Buổi 42–47: chỉ Barista/Admin vào được; HubConnection gửi kèm JWT (hub kiểm tra quyền JoinBaristas).
    ========================================================================== *@
 @page "/barista"
 @* IAsyncDisposable (không phải IDisposable): dọn HubConnection cần await DisposeAsync() *@
 @implements IAsyncDisposable
+@* Roles.Staff = "Barista,Admin" (dấu phẩy = HOẶC) *@
+@attribute [Authorize(Roles = Roles.Staff)]
 @inject OrderApiClient OrderApi
+@inject AuthSession Session
 @inject OrderHubConnectionFactory HubFactory
 @inject ILogger<Barista> Logger
 
@@ -122,7 +126,8 @@ else
         }
 
         // Biến cục bộ (không null) dùng trong lambda bên dưới; field _hub để DisposeAsync đóng kết nối
-        HubConnection hub = HubFactory.Create();
+        // 👉 Bước 12 (b47.md): truyền HÀM lấy token (không phải chuỗi token) — reconnect sau 20 phút vẫn có token còn hạn
+        HubConnection hub = HubFactory.Create(() => Session.GetAccessTokenAsync());
         _hub = hub;
 
         // On<T>(tên sự kiện, handler): đăng ký nhận sự kiện server gửi xuống.

@@ -21,13 +21,14 @@ public class ReportsAndModelTests
     public async Task DailyRevenue_ExcludesCancelledOrders()
     {
         await using CyberCafeApiFactory factory = new();
-        HttpClient client = factory.CreateClient();
-        OrderDto kept = await client.PlaceAsync();
-        OrderDto cancelled = await client.PlaceAsync();
-        await client.PostAsync($"/api/orders/{cancelled.Id}/cancel", null);
+        HttpClient customer = await factory.CustomerAsync();
+        OrderDto kept = await customer.PlaceAsync();
+        OrderDto cancelled = await customer.PlaceAsync();
+        await customer.PostAsync($"/api/orders/{cancelled.Id}/cancel", null); // khách tự hủy khi còn Pending
         string today = DateTime.Now.ToString("yyyy-MM-dd");
 
-        List<DailyRevenueDto> rows = (await client.GetFromJsonAsync<List<DailyRevenueDto>>(
+        // Báo cáo doanh thu: chỉ Admin (Buổi 42–47)
+        List<DailyRevenueDto> rows = (await (await factory.AdminAsync()).GetFromJsonAsync<List<DailyRevenueDto>>(
             $"/api/reports/daily-revenue?from={today}&to={today}", CyberCafeApiFactory.Json))!;
 
         DailyRevenueDto row = Assert.Single(rows);
@@ -41,7 +42,7 @@ public class ReportsAndModelTests
     {
         await using CyberCafeApiFactory factory = new();
 
-        HttpResponseMessage response = await factory.CreateClient().GetAsync("/api/reports/daily-revenue?from=2026-10-09&to=2026-10-01");
+        HttpResponseMessage response = await (await factory.AdminAsync()).GetAsync("/api/reports/daily-revenue?from=2026-10-09&to=2026-10-01");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }

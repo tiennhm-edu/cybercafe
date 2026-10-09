@@ -16,7 +16,7 @@ Mỗi tag = 1 commit trên `main`, đã `dotnet build` + `dotnet test` xanh. Gi�
 | `b23-blazor-start` | 23 | Blazor Server buổi 1: Blazor Web App, layout, routing, Razor syntax, DI `MenuService` | ✅ done |
 | `b28-cart-state` | 24–31 | Binding, component, parameter, EventCallback, form + validation, lifecycle, state giỏ hàng, domain OOP | ✅ done |
 | `b40-api-efcore` | 32–41 | `CyberCafe.Api` (controllers) + EF Core SQL Server (Docker) + SignalR quầy barista; Web gọi API bằng typed HttpClient | ✅ done |
-| `b47-auth-cache` | 42–47 | JWT + BCrypt + refresh token, phân quyền theo vai trò, middleware, filter, Redis cache, rate limiting | ⏳ planned |
+| `b47-auth-cache` | 42–47 | JWT + BCrypt + refresh token, phân quyền theo vai trò, middleware, filter, Redis cache, rate limiting | ✅ done |
 | `b48-clean-arch` | 48 | Domain / Application / Infrastructure / Api | ⏳ planned |
 | `b53-ddd-cqrs` | 49–53 | Order aggregate, value object, domain event, CQRS | ⏳ planned |
 | `b55-microservice` | 54–55 | .NET Aspire AppHost, YARP gateway, tách Menu/Order/Payment service, message broker | ⏳ planned |
@@ -68,20 +68,22 @@ Mục tiêu: dữ liệu đi qua HTTP API và nằm bền vững trong SQL Serve
 
 Kịch bản: [docs/sessions/b40.md](docs/sessions/b40.md)
 
-## ⏳ `b47-auth-cache` — Buổi 42–47
+## ✅ `b47-auth-cache` — Buổi 42–47
 
 Mục tiêu: bảo mật theo vai trò + hiệu năng + vận hành an toàn.
 
-- [ ] Bảng `Users` (Email, PasswordHash **BCrypt**, Role: Customer/Barista/Admin) + `RefreshTokens`; tài khoản dev chỉ seed ở môi trường Development
-- [ ] `POST /api/auth/register|login|refresh|logout`, `GET /api/auth/me`; JWT access token + refresh token xoay vòng (phát hiện dùng lại)
-- [ ] Policy: Admin quản lý menu + báo cáo; Barista đổi trạng thái đơn + vào group hub; Customer đặt đơn và chỉ xem đơn của mình (chặn IDOR)
-- [ ] Web: trang đăng nhập/đăng ký, `AuthenticationStateProvider` tự viết, `DelegatingHandler` gắn Bearer (+ refresh khi 401), `<AuthorizeView>`, menu theo vai trò, hub gửi `access_token`
-- [ ] Middleware: correlation id + request logging; exception handler toàn cục → `ProblemDetails`
-- [ ] Filter có giá trị thật (so với lab b43): validation filter thống nhất lỗi 400; filter xóa cache menu sau khi ghi
-- [ ] Redis (`IDistributedCache`) cho `GET /api/products`, invalidation khi ghi, tự lùi về DB khi Redis lỗi; Redis trong `docker-compose.yml`
-- [ ] ADR: dùng `DbContext` trực tiếp, chưa thêm Repository/UoW (b48 sẽ tách interface)
-- [ ] Rate limiting cho đăng nhập
-- [ ] Test: 401/403 theo vai trò, IDOR, refresh rotation/reuse, hash mật khẩu, cache invalidation, rate limit
+- [x] Bảng `Users` (Email, PasswordHash **BCrypt**, Role: Customer/Barista/Admin) + `RefreshTokens` (chỉ lưu hash); migration `AddUsersAndRefreshTokens`; tài khoản dev chỉ seed khi `Seed:DevAccounts = true`
+- [x] `POST /api/auth/register|login|refresh|logout`, `GET /api/auth/me`; JWT access token + refresh token xoay vòng (phát hiện dùng lại → thu hồi cả họ)
+- [x] Policy: `ManageMenu` (Admin: menu + báo cáo), `ProcessOrders` (Barista/Admin: đổi trạng thái, group hub), `PlaceOrders` (Customer); chặn IDOR ở REST (`GET`, `cancel`, `/mine`) và hub (`WatchOrder`)
+- [x] Web: `/login`, `/register`, `/my-orders`; `AuthSession` + `ProtectedSessionStorage`; `JwtAuthenticationStateProvider`; `BearerTokenHandler` (`DelegatingHandler`, refresh 1 lần khi 401); `AuthorizeRouteView`, `<AuthorizeView>` theo vai trò; hub gửi `access_token`; tắt prerender
+- [x] Middleware: `CorrelationIdMiddleware`, `RequestLoggingMiddleware`; `IExceptionHandler` → `ProblemDetails` (có `correlationId`)
+- [x] Filter có giá trị thật: `[InvalidateMenuCache]`; bảng đối chiếu với các filter của lab b43 trong `docs/sessions/b47.md`
+- [x] Redis (`IDistributedCache`) cho `GET /api/products`, key có version để invalidation, header `X-Cache`, tự lùi về DB khi Redis lỗi; Redis trong `docker-compose.yml`
+- [x] ADR [0001](docs/adr/0001-dbcontext-truc-tiep.md): dùng `DbContext` trực tiếp, chưa thêm Repository/UoW
+- [x] Rate limiting cho đăng nhập/đăng ký (429 + `Retry-After`)
+- [x] Test: 401/403 theo vai trò, IDOR, refresh rotation/reuse, hash mật khẩu, cache invalidation, Redis lỗi, rate limit, handler/AuthSession phía Web
+
+Kịch bản: [docs/sessions/b47.md](docs/sessions/b47.md)
 
 ## ⏳ `b48-clean-arch` — Buổi 48
 

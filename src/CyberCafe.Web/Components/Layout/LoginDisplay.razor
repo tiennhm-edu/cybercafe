@@ -1,0 +1,38 @@
+@* ==========================================================================
+   LoginDisplay.razor — tên người dùng + đăng nhập/đăng xuất trên thanh top-row (Buổi 42–47).
+   <AuthorizeView>: <Authorized> khi đã đăng nhập (context.User là ClaimsPrincipal),
+   <NotAuthorized> khi chưa. Tự vẽ lại khi AuthenticationStateProvider báo đổi trạng thái.
+   ========================================================================== *@
+@inject AuthSession Session
+@inject AuthApiClient AuthApi
+@inject NavigationManager Navigation
+
+<AuthorizeView>
+    <Authorized>
+        @* Identity.Name đọc claim "name"; role đọc claim "role" — xem JwtClaimsReader *@
+        <span class="ms-3 small">
+            👤 @context.User.Identity?.Name
+            <span class="badge bg-light text-dark">@context.User.FindFirst(AppClaimTypes.Role)?.Value</span>
+        </span>
+        <button class="btn btn-link btn-sm" @onclick="LogoutAsync">Đăng xuất</button>
+    </Authorized>
+    <NotAuthorized>
+        <a class="btn btn-link btn-sm ms-3" href="login">Đăng nhập</a>
+        <a class="btn btn-link btn-sm" href="register">Đăng ký</a>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private async Task LogoutAsync()
+    {
+        // 1) Báo Api thu hồi refresh token (để vé bị lộ cũng không dùng được nữa)
+        if (await Session.GetAsync() is { } data)
+        {
+            await AuthApi.LogoutAsync(data.RefreshToken);
+        }
+
+        // 2) Xóa phiên phía Web → AuthorizeView/NavMenu vẽ lại ở trạng thái ẩn danh
+        await Session.SignOutAsync();
+        Navigation.NavigateTo("");
+    }
+}

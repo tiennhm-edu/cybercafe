@@ -1,0 +1,93 @@
+@* ==========================================================================
+   MyOrders.razor — "Đơn của tôi" /my-orders (Buổi 42–47 · Customer chỉ thấy đơn của mình).
+   Web KHÔNG tự lọc theo người dùng: gọi GET /api/orders/mine, Api lọc theo "sub" trong token.
+   Lọc ở client thì chỉ cần sửa request là xem được đơn người khác (IDOR) — luật phải nằm ở server.
+   ========================================================================== *@
+@page "/my-orders"
+@* [Authorize(Roles = ...)] trên trang: AuthorizeRouteView chặn trước khi render; chưa đăng nhập → /login *@
+@attribute [Authorize(Roles = Roles.Customer)]
+@* OrderApiClient đi qua BearerTokenHandler → request tự kèm token của khách đang đăng nhập *@
+@inject OrderApiClient OrderApi
+
+<PageTitle>CyberCafe — Đơn của tôi</PageTitle>
+
+<h1>Đơn của tôi</h1>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger py-2">@_error</div>
+}
+
+@* null = đang tải; danh sách rỗng = khách chưa đặt đơn nào *@
+@if (_orders is null)
+{
+    <p><span class="spinner-border spinner-border-sm"></span> Đang tải...</p>
+}
+else if (_orders.Count == 0)
+{
+    <p class="text-muted">Bạn chưa có đơn nào. <a href="menu">Xem thực đơn</a></p>
+}
+else
+{
+    <table class="table align-middle">
+        <thead>
+            <tr><th>Mã đơn</th><th>Thời gian</th><th>Món</th><th class="text-end">Tổng</th><th>Trạng thái</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (OrderDto order in _orders)
+            {
+                <tr @key="order.Id">
+                    @* Link sang trang xác nhận: Api vẫn kiểm tra chủ đơn lần nữa khi mở (không tin link) *@
+                    <td><a href="orders/@order.Id">@order.Code</a></td>
+                    <td>@order.CreatedAt.ToString("HH:mm dd/MM")</td>
+                    <td class="small">@string.Join(", ", order.Items.Select(i => $"{i.ProductName} × {i.Quantity}"))</td>
+                    <td class="text-end">@order.FinalAmount.ToString("N0") đ</td>
+                    <td><OrderStatusBadge Status="order.Status" /></td>
+                    <td>
+                        @* Khách chỉ hủy được khi quán CHƯA bắt đầu pha (Api kiểm tra lại luật này) *@
+                        @if (order.Status == OrderStatus.Pending)
+                        {
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => CancelAsync(order)">Hủy</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    // Đơn của khách (Api đã lọc theo "sub" trong token, mới nhất trước)
+    private List<OrderDto>? _orders;
+    private string? _error;
+
+    // Prerender đã tắt (Buổi 42–47) → hàm này chạy 1 lần trong circuit, lúc đã đọc được token
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _orders = (await OrderApi.GetMineAsync()).ToList();
+        }
+        catch (ApiException ex)
+        {
+            _orders = [];
+            _error = ex.Message;
+        }
+    }
+
+    private async Task CancelAsync(OrderDto order)
+    {
+        try
+        {
+            OrderDto updated = await OrderApi.CancelAsync(order.Id);
+            // Thay đúng dòng vừa hủy bằng dữ liệu mới từ Api (record → tạo list mới cho gọn)
+            _orders = _orders!.Select(o => o.Id == updated.Id ? updated : o).ToList();
+            _error = null;
+        }
+        catch (ApiException ex)
+        {
+            // 409: barista vừa bắt đầu pha → không hủy được nữa
+            _error = ex.Message;
+        }
+    }
+}

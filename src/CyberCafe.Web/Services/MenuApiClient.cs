@@ -3,16 +3,18 @@
 // Typed client: Program.cs đăng ký AddHttpClient<MenuApiClient>(...) → IHttpClientFactory tạo
 // HttpClient (đã gắn BaseAddress) và tái sử dụng kết nối. Trang chỉ @inject MenuApiClient.
 // ⚠️ Lỗi hay gặp: tự "new HttpClient()" trong mỗi component → cạn socket (socket exhaustion) khi tải cao.
+// Buổi 42–47: nhận thêm AuthSession → thêm/sửa/xóa món tự kèm token Admin (qua BearerTokenHandler).
 // ============================================================================
 using System.Net;
 using CyberCafe.Contracts.Common;
 using CyberCafe.Contracts.Products;
 using CyberCafe.Domain.Products;
+using CyberCafe.Web.Services.Auth;
 
 namespace CyberCafe.Web.Services;
 
 /// <summary>Đọc / ghi thực đơn qua CyberCafe.Api.</summary>
-public class MenuApiClient(HttpClient http) : ApiClientBase(http)
+public class MenuApiClient(HttpClient http, AuthSession? session = null) : ApiClientBase(http, session)
 {
     // 👉 Bước 10 (b40.md)
     /// <summary>

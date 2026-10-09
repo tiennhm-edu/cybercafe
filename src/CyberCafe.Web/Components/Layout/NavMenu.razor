@@ -1,6 +1,8 @@
 @* ==========================================================================
    NavMenu.razor — thanh điều hướng bên trái (Buổi 23 · Routing + NavLink; Buổi 24–31 thêm Giỏ hàng;
-   Buổi 32–41 thêm Quầy barista + Quản lý thực đơn — Buổi 42–47 sẽ ẩn/hiện theo vai trò).
+   Buổi 32–41 thêm Quầy barista + Quản lý thực đơn — Buổi 42–47 ẩn/hiện theo vai trò bằng <AuthorizeView>).
+   ⚠️ Ẩn link KHÔNG phải là bảo mật: người dùng vẫn gõ được URL → trang phải có [Authorize]
+      và Api phải kiểm tra quyền. Ẩn link chỉ để giao diện gọn đúng vai trò.
    Mỗi mục là 1 <NavLink> trỏ tới 1 route khai báo bằng @page trong Pages/.
    ========================================================================== *@
 <div class="top-row ps-3 navbar navbar-dark">
@@ -37,19 +39,33 @@
             </NavLink>
         </div>
 
-        <div class="nav-item px-3">
-            @* /barista → Barista.razor: nhận đơn realtime qua SignalR *@
-            <NavLink class="nav-link" href="barista">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Quầy barista
-            </NavLink>
-        </div>
+        @* AuthorizeView Roles="...": chỉ render nội dung khi người dùng có 1 trong các role (dấu phẩy = HOẶC) *@
+        <AuthorizeView Roles="@Roles.Customer">
+            <div class="nav-item px-3">
+                @* /my-orders → MyOrders.razor: chỉ đơn của chính khách (Api lọc theo token) *@
+                <NavLink class="nav-link" href="my-orders">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Đơn của tôi
+                </NavLink>
+            </div>
+        </AuthorizeView>
 
-        <div class="nav-item px-3">
-            @* /admin/menu → Admin/MenuAdmin.razor: CRUD thực đơn qua API *@
-            <NavLink class="nav-link" href="admin/menu">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Quản lý thực đơn
-            </NavLink>
-        </div>
+        <AuthorizeView Roles="@Roles.Staff">
+            <div class="nav-item px-3">
+                @* /barista → Barista.razor: nhận đơn realtime qua SignalR *@
+                <NavLink class="nav-link" href="barista">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Quầy barista
+                </NavLink>
+            </div>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="@Roles.Admin">
+            <div class="nav-item px-3">
+                @* /admin/menu → Admin/MenuAdmin.razor: CRUD thực đơn qua API *@
+                <NavLink class="nav-link" href="admin/menu">
+                    <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Quản lý thực đơn
+                </NavLink>
+            </div>
+        </AuthorizeView>
 
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="about">

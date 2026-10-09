@@ -2,6 +2,7 @@
 // ProductsEndpointTests.cs — test tích hợp /api/products (Buổi 32–41 · CRUD, mã trạng thái, LINQ).
 // Test ĐỌC dùng chung 1 factory (IClassFixture) vì không đổi dữ liệu;
 // test GHI tạo factory riêng (database InMemory riêng) để không ảnh hưởng nhau.
+// Buổi 42–47: GET vẫn ẩn danh; thêm/sửa/xóa phải đăng nhập Admin (quyền chi tiết xem AuthorizationTests).
 // ============================================================================
 using System.Net;
 using System.Net.Http.Json;
@@ -87,7 +88,7 @@ public class ProductsEndpointTests(CyberCafeApiFactory shared) : IClassFixture<C
     public async Task Create_Valid_Returns201WithLocation()
     {
         await using CyberCafeApiFactory factory = new();
-        HttpClient client = factory.CreateClient();
+        HttpClient client = await factory.AdminAsync();
 
         HttpResponseMessage response = await client.PostAsJsonAsync("/api/products", NewCake(), CyberCafeApiFactory.Json);
 
@@ -102,8 +103,9 @@ public class ProductsEndpointTests(CyberCafeApiFactory shared) : IClassFixture<C
     public async Task Create_Invalid_Returns400WithFieldErrors()
     {
         ProductRequest bad = new() { Type = ProductTypes.Coffee, Name = "", Price = -1, Variant = "" };
+        HttpClient admin = await shared.AdminAsync(); // request bị từ chối (400) nên không đổi dữ liệu dùng chung
 
-        HttpResponseMessage response = await this._client.PostAsJsonAsync("/api/products", bad, CyberCafeApiFactory.Json);
+        HttpResponseMessage response = await admin.PostAsJsonAsync("/api/products", bad, CyberCafeApiFactory.Json);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         ValidationProblemDetails problem = await response.ReadAsync<ValidationProblemDetails>();
@@ -116,7 +118,7 @@ public class ProductsEndpointTests(CyberCafeApiFactory shared) : IClassFixture<C
     public async Task Update_ChangesFields_ButNotType()
     {
         await using CyberCafeApiFactory factory = new();
-        HttpClient client = factory.CreateClient();
+        HttpClient client = await factory.AdminAsync();
         ProductRequest request = new() { Type = ProductTypes.Coffee, Name = "Americano đá", Price = 37000, Variant = "Arabica" };
 
         ProductDto updated = await (await client.PutAsJsonAsync("/api/products/3", request, CyberCafeApiFactory.Json)).ReadAsync<ProductDto>();
@@ -132,7 +134,7 @@ public class ProductsEndpointTests(CyberCafeApiFactory shared) : IClassFixture<C
     public async Task Delete_UnsoldProduct_Returns204ThenNotFound()
     {
         await using CyberCafeApiFactory factory = new();
-        HttpClient client = factory.CreateClient();
+        HttpClient client = await factory.AdminAsync();
 
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync("/api/products/8")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/products/8")).StatusCode);
@@ -144,10 +146,9 @@ public class ProductsEndpointTests(CyberCafeApiFactory shared) : IClassFixture<C
     public async Task Delete_SoldProduct_Returns409()
     {
         await using CyberCafeApiFactory factory = new();
-        HttpClient client = factory.CreateClient();
-        await client.PlaceAsync(); // đơn có món 1 và 7
+        await (await factory.CustomerAsync()).PlaceAsync(); // đơn có món 1 và 7
 
-        HttpResponseMessage response = await client.DeleteAsync("/api/products/7");
+        HttpResponseMessage response = await (await factory.AdminAsync()).DeleteAsync("/api/products/7");
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }

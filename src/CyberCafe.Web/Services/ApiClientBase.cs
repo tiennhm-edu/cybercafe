@@ -5,11 +5,14 @@
 //   2) Lỗi mạng (API chưa chạy, timeout) → ApiException với thông báo tiếng Việt.
 //   3) Response 4xx/5xx → đọc ProblemDetails (title, detail, errors) → ApiException.
 // Trang Razor chỉ cần: try { await Client.XxxAsync(); } catch (ApiException ex) { _error = ex.Message; }
+// Buổi 42–47: nếu client được tạo kèm AuthSession, mỗi request mang theo session (HttpRequestMessage.Options)
+// để BearerTokenHandler gắn đúng token của người dùng đang dùng tab này.
 // ============================================================================
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CyberCafe.Web.Services.Auth;
 
 namespace CyberCafe.Web.Services;
 
@@ -23,8 +26,10 @@ public class ApiException(HttpStatusCode status, string message, Exception? inne
     public HttpStatusCode Status { get; } = status;
 }
 
-/// <summary>Lớp cha của MenuApiClient, OrderApiClient.</summary>
-public abstract class ApiClientBase(HttpClient http)
+/// <summary>Lớp cha của MenuApiClient, OrderApiClient, AuthApiClient.</summary>
+/// <param name="http">HttpClient do IHttpClientFactory cấp.</param>
+/// <param name="session">Phiên đăng nhập của circuit (null = gọi ẩn danh, vd AuthApiClient / unit test).</param>
+public abstract class ApiClientBase(HttpClient http, AuthSession? session = null)
 {
     /// <summary>
     /// JSON giống phía Api: camelCase (JsonSerializerDefaults.Web) + enum dạng chuỗi ("Pending").
@@ -59,6 +64,13 @@ public abstract class ApiClientBase(HttpClient http)
 
     private async Task<HttpResponseMessage> SendCoreAsync(HttpRequestMessage request, CancellationToken ct)
     {
+        // Typed client được tạo trong scope CỦA CIRCUIT → session ở đây là đúng người dùng.
+        // Đính vào request để DelegatingHandler (sống ở scope khác) đọc được — xem BearerTokenHandler.
+        if (session is not null)
+        {
+            request.Options.Set(BearerTokenHandler.SessionKey, session);
+        }
+
         try
         {
             return await http.SendAsync(request, ct);
