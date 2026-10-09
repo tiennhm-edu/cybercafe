@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/CyberCafe.Domain/CyberCafe.Domain.csproj" />
     <Project Path="src/CyberCafe.Web/CyberCafe.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">

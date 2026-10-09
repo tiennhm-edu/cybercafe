@@ -1,0 +1,146 @@
+@* ==========================================================================
+   Checkout.razor — trang Đặt hàng /checkout (Buổi 24–31 · Forms & validation).
+   Minh họa: EditForm + DataAnnotationsValidator + các Input* component,
+   OnValidSubmit, NavigationManager để chuyển trang sau khi đặt thành công.
+   Luồng: form hợp lệ → Cart.ToOrder → Order.Checkout(Payment) → OrderStore.Add
+          → CartState.Clear → chuyển tới /orders/{id}.
+   ========================================================================== *@
+@page "/checkout"
+@inject CartState CartState
+@inject OrderStore OrderStore
+@* NavigationManager: service có sẵn của Blazor để đọc URL hiện tại và chuyển trang bằng code *@
+@inject NavigationManager Navigation
+
+<PageTitle>CyberCafe — Đặt hàng</PageTitle>
+
+<h1>Đặt hàng</h1>
+
+@if (CartState.Cart.IsEmpty)
+{
+    <div class="alert alert-light">Giỏ hàng đang trống. <a href="menu">Chọn món</a> trước khi đặt hàng.</div>
+}
+else
+{
+    <div class="row">
+        <div class="col-lg-7">
+            @* EditForm: quản lý EditContext; DataAnnotationsValidator đọc [Required], [RegularExpression]... *@
+            @* Model="_model": object chứa dữ liệu form (CheckoutModel).
+               OnValidSubmit: chỉ gọi PlaceOrder khi KHÔNG còn lỗi; có lỗi thì form hiện lỗi và dừng.
+               FormName: tên định danh form, bắt buộc khi form được submit ở chế độ render tĩnh (SSR). *@
+            <EditForm Model="_model" OnValidSubmit="PlaceOrder" FormName="checkout">
+                @* ⚠️ Lỗi hay gặp: quên <DataAnnotationsValidator /> → các attribute [Required]... bị bỏ qua, form luôn "hợp lệ". *@
+                <DataAnnotationsValidator />
+                @* ValidationSummary: danh sách TẤT CẢ lỗi ở đầu form *@
+                <ValidationSummary class="text-danger" />
+
+                <div class="mb-3">
+                    <label class="form-label" for="fullName">Họ tên</label>
+                    @* InputText + @bind-Value: two-way binding của component form (khác @bind của thẻ <input> thường).
+                       Input* tự gắn class valid/invalid → app.css tô viền xanh/đỏ. *@
+                    <InputText id="fullName" class="form-control" @bind-Value="_model.FullName" />
+                    @* ValidationMessage For="() => ...": lỗi của RIÊNG field này, đặt ngay dưới ô nhập *@
+                    <ValidationMessage For="() => _model.FullName" class="text-danger small" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="phone">Số điện thoại</label>
+                    <InputText id="phone" class="form-control" @bind-Value="_model.PhoneNumber" placeholder="09xxxxxxxx" />
+                    <ValidationMessage For="() => _model.PhoneNumber" class="text-danger small" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="payment">Thanh toán</label>
+                    @* InputSelect bind với enum: value của <option> là tên enum (Cash/Card/Momo) *@
+                    <InputSelect id="payment" class="form-select" @bind-Value="_model.PaymentMethod">
+                        <option value="@PaymentMethod.Cash">Tiền mặt tại quầy</option>
+                        <option value="@PaymentMethod.Card">Thẻ ngân hàng</option>
+                        <option value="@PaymentMethod.Momo">Ví MoMo (theo SĐT)</option>
+                    </InputSelect>
+                    <ValidationMessage For="() => _model.PaymentMethod" class="text-danger small" />
+                </div>
+
+                @* Form động: ô số thẻ chỉ xuất hiện khi chọn "Thẻ" — render lại ngay khi đổi lựa chọn *@
+                @if (_model.PaymentMethod == PaymentMethod.Card)
+                {
+                    <div class="mb-3">
+                        <label class="form-label" for="card">Số thẻ</label>
+                        <InputText id="card" class="form-control" @bind-Value="_model.CardNumber" placeholder="Chỉ nhập số, demo" />
+                        @* Lỗi này đến từ CheckoutModel.Validate() (IValidatableObject), không phải attribute *@
+                        <ValidationMessage For="() => _model.CardNumber" class="text-danger small" />
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label" for="note">Ghi chú</label>
+                    <InputTextArea id="note" class="form-control" rows="2" @bind-Value="_model.Note" placeholder="Ít đá, ít ngọt..." />
+                    <ValidationMessage For="() => _model.Note" class="text-danger small" />
+                </div>
+
+                @if (_error is not null)
+                {
+                    <div class="alert alert-danger">@_error</div>
+                }
+
+                @* type="submit" bên trong EditForm → kích hoạt validate rồi OnValidSubmit.
+                   disabled khi đang xử lý → chống bấm 2 lần tạo 2 đơn. *@
+                <button type="submit" class="btn btn-success" disabled="@_submitting">
+                    Xác nhận đặt hàng · @CartState.Cart.Total.ToString("N0") đ
+                </button>
+                <a href="cart" class="btn btn-link">Quay lại giỏ</a>
+            </EditForm>
+        </div>
+
+        <div class="col-lg-5 mt-4 mt-lg-0">
+            <div class="card">
+                <div class="card-header">Đơn của bạn</div>
+                <ul class="list-group list-group-flush">
+                    @foreach (OrderItem item in CartState.Cart.Items)
+                    {
+                        <li class="list-group-item small">@item.Display()</li>
+                    }
+                </ul>
+                <div class="card-body small">
+                    @if (CartState.Cart.Discount is not null)
+                    {
+                        <div>Giảm giá: @CartState.Cart.Discount.Display()</div>
+                    }
+                    <div class="fw-bold">Tổng cộng: @CartState.Cart.Total.ToString("N0") đ</div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    // Model của form: new 1 lần, EditForm bind trực tiếp vào các property của nó
+    private readonly CheckoutModel _model = new();
+    private string? _error;
+    private bool _submitting;
+
+    // Chỉ chạy khi DataAnnotations (và IValidatableObject) đều hợp lệ
+    private void PlaceOrder()
+    {
+        _submitting = true;
+        try
+        {
+            // Chuyển dữ liệu form (có thể "sai tạm thời") sang domain object (luôn hợp lệ)
+            Customer customer = new(_model.FullName, _model.PhoneNumber);
+            Order order = CartState.Cart.ToOrder(customer, _model.Note);
+            order.Checkout(_model.CreatePayment(order.FinalAmount));
+
+            // Lưu đơn TRƯỚC (để có Id), rồi mới làm trống giỏ
+            OrderStore.Add(order);
+            CartState.Clear();
+
+            // Chuyển sang trang xác nhận; Id đi theo URL → OrderConfirmation đọc qua route parameter
+            Navigation.NavigateTo($"orders/{order.Id}");
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // Domain từ chối (vd: dữ liệu không hợp lệ) → báo lỗi, không crash circuit
+            // "when (...)": exception filter — chỉ bắt 2 loại lỗi nghiệp vụ, lỗi khác vẫn ném tiếp
+            _error = ex.Message;
+            _submitting = false;
+        }
+    }
+}

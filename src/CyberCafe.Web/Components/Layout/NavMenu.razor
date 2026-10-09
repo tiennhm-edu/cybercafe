@@ -1,5 +1,5 @@
 @* ==========================================================================
-   NavMenu.razor — thanh điều hướng bên trái (Buổi 23 · Routing + NavLink).
+   NavMenu.razor — thanh điều hướng bên trái (Buổi 23 · Routing + NavLink; Buổi 24–31 thêm Giỏ hàng).
    Mỗi mục là 1 <NavLink> trỏ tới 1 route khai báo bằng @page trong Pages/.
    ========================================================================== *@
 <div class="top-row ps-3 navbar navbar-dark">
@@ -26,6 +26,13 @@
             @* href không có dấu "/" đầu: tương đối với <base href="/"> trong App.razor → /menu *@
             <NavLink class="nav-link" href="menu">
                 <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Thực đơn
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            @* /cart → CartPage.razor (@page "/cart") *@
+            <NavLink class="nav-link" href="cart">
+                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Giỏ hàng
             </NavLink>
         </div>
 

@@ -1,5 +1,5 @@
 @* ==========================================================================
-   MainLayout.razor — layout chung của mọi trang (Buổi 23 · Layout).
+   MainLayout.razor — layout chung của mọi trang (Buổi 23 · Layout; Buổi 24–31 thêm CartSummary).
    Layout là "khuôn": sidebar + thanh trên cùng giữ nguyên, chỉ phần @Body
    thay đổi theo trang. Routes.razor chọn layout này làm DefaultLayout.
    ========================================================================== *@
@@ -14,7 +14,9 @@
 
     <main>
         <div class="top-row px-4">
-            <span class="text-muted">CyberCafe — Blazor Server demo</span>
+            @* CartSummary (Shared/): badge giỏ hàng. Nằm trong layout nên hiện ở MỌI trang,
+               tự cập nhật nhờ subscribe CartState.OnChange (xem CartSummary.razor). *@
+            <CartSummary />
         </div>
 
         <article class="content px-4">

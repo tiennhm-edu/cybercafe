@@ -1,50 +1,137 @@
 @* ==========================================================================
-   Menu.razor — trang Thực đơn (Buổi 23 · Dependency Injection + Razor lặp).
-   Minh họa: @inject lấy service từ DI, @foreach lồng nhau, biểu thức điều kiện
-   trong thuộc tính class, @if/else để hiện badge.
+   Menu.razor — trang Thực đơn (Buổi 23 tạo · Buổi 24–31 nâng cấp).
+   Buổi 23: @inject service, @foreach hiển thị danh sách.
+   Buổi 24–31: tách card thành component con <ProductCard>, nhận sự kiện
+   "thêm vào giỏ" qua EventCallback, lọc bằng @bind / @bind:event, ghi vào
+   CartState, và quan sát LIFECYCLE (OnInitializedAsync, OnAfterRender, Dispose).
    ========================================================================== *@
 @page "/menu"
-@* @inject <Kiểu> <TênBiến>: xin DI container 1 instance MenuService (đã đăng ký trong Program.cs).
+@* @implements IDisposable: Blazor sẽ gọi Dispose() khi component bị bỏ (rời trang). *@
+@implements IDisposable
+@* @inject <Kiểu> <TênBiến>: xin DI container 1 instance (đã đăng ký trong Program.cs).
    ⚠️ Lỗi hay gặp: quên AddSingleton/AddScoped trong Program.cs → lỗi lúc chạy
    "Cannot provide a value for property 'MenuService'... no registered service". *@
 @inject MenuService MenuService
+@inject CartState CartState
+@* ILogger<Menu>: ghi log ra console — dùng để quan sát thứ tự các hàm lifecycle. *@
+@inject ILogger<Menu> Logger
 
 <PageTitle>CyberCafe — Thực đơn</PageTitle>
 
 <h1>Thực đơn</h1>
 
-@* @foreach lồng nhau: nhóm theo Category *@
-@foreach (string category in MenuService.GetCategories())
+@if (_products is null)
 {
-    <h3 class="mt-4">@category</h3>
+    @* Lần render đầu: OnInitializedAsync chưa xong → hiện loading *@
+    <p><span class="spinner-border spinner-border-sm"></span> Đang tải thực đơn...</p>
+}
+else
+{
+    <div class="row g-2 mb-3">
+        <div class="col-md-6">
+            @* two-way binding + cập nhật theo từng phím gõ (oninput) *@
+            @* @bind mặc định cập nhật ở sự kiện "onchange" (khi rời ô / nhấn Enter).
+               @bind:event="oninput" → cập nhật _keyword NGAY mỗi phím gõ → danh sách lọc tức thì. *@
+            <input class="form-control" placeholder="Tìm món..." @bind="_keyword" @bind:event="oninput" />
+        </div>
+        <div class="col-md-4">
+            @* @bind trên <select>: chọn option → gán value của option vào _category *@
+            <select class="form-select" @bind="_category">
+                <option value="">Tất cả nhóm</option>
+                @foreach (string category in _products.Select(x => x.Category).Distinct())
+                {
+                    <option value="@category">@category</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert alert-success py-2">@_message</div>
+    }
+
+    @if (!FilteredProducts.Any())
+    {
+        <p class="text-muted">Không tìm thấy món phù hợp với "@_keyword".</p>
+    }
+
     @* Bootstrap grid: 1 cột trên điện thoại, 2 cột (md), 4 cột (lg) *@
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-3">
-        @foreach (MenuItem item in MenuService.GetByCategory(category))
+        @foreach (Product product in FilteredProducts)
         {
-            <div class="col">
-                @* @( ... ): biểu thức C# phức tạp (có dấu cách, toán tử ?:) phải bọc trong ngoặc *@
-                <div class="card h-100 @(item.IsAvailable ? "" : "opacity-50")">
-                    <div class="card-body">
-                        <div class="fs-1">@item.Emoji</div>
-                        <h5 class="card-title">@item.Name</h5>
-                        <p class="card-text small text-muted">@item.Description</p>
-                        @* ToString("N0"): định dạng số có dấu phân cách nghìn, 0 chữ số thập phân *@
-                        <p class="fw-bold mb-0">@item.Price.ToString("N0") đ</p>
-                    </div>
-                    <div class="card-footer bg-transparent">
-                        @if (item.IsAvailable)
-                        {
-                            <span class="badge bg-success">Còn hàng</span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-secondary">Tạm hết</span>
-                        }
-                    </div>
-                </div>
+            @* @key: giúp Blazor nhận diện từng phần tử khi danh sách đổi (lọc/sắp xếp) →
+               giữ đúng state nội bộ (size, số lượng đang chọn) của từng ProductCard. *@
+            <div class="col" @key="product.Id">
+                @* Cha → con: truyền dữ liệu qua [Parameter] Product.
+                   Con → cha: con gọi OnAddToCart, cha xử lý ở HandleAddToCart.
+                   ⚠️ Lỗi hay gặp: viết OnAddToCart="HandleAddToCart()" (có ngoặc) → gọi hàm ngay lúc render, sai. *@
+                <ProductCard Product="product" OnAddToCart="HandleAddToCart" />
             </div>
         }
     </div>
+
+    <p class="mt-4 text-muted">Hiển thị @FilteredProducts.Count() / @_products.Count món.</p>
 }
 
-<p class="mt-4 text-muted">Tổng cộng @MenuService.GetAll().Count món.</p>
+@code {
+    // null = chưa tải xong (markup dựa vào đó để hiện "Đang tải...")
+    private IReadOnlyList<Product>? _products;
+    private string _keyword = string.Empty;
+    private string _category = string.Empty;
+    private string? _message;
+    // CancellationTokenSource: cho phép HỦY tác vụ async (Task.Delay) nếu người dùng rời trang giữa chừng
+    private readonly CancellationTokenSource _cts = new();
+
+    // Property tính toán: mỗi lần render đọc lại _keyword/_category → không cần tự gọi "lọc lại"
+    private IEnumerable<Product> FilteredProducts => (_products ?? [])
+        .Where(x => string.IsNullOrEmpty(_category) || x.Category == _category)
+        .Where(x => x.Name.Contains(_keyword, StringComparison.OrdinalIgnoreCase));
+
+    // Lifecycle 1: chạy 1 lần khi component khởi tạo — chỗ để load dữ liệu
+    // Blazor render 1 lần khi gặp await đầu tiên (lúc này _products còn null → "Đang tải..."),
+    // rồi tự render lại khi Task hoàn tất.
+    // ⚠️ Vì App.razor bật PRERENDER: hàm này chạy 2 LẦN — 1 lần khi server prerender HTML tĩnh,
+    // 1 lần nữa khi circuit SignalR kết nối (component được tạo mới). Bình thường, không phải bug;
+    // muốn tránh tải 2 lần thì dùng PersistentComponentState (giới thiệu sau).
+    protected override async Task OnInitializedAsync()
+    {
+        _products = await MenuService.GetMenuAsync(_cts.Token);
+    }
+
+    // Lifecycle 2: chạy SAU mỗi lần render. firstRender = true chỉ ở lần đầu (sau khi circuit kết nối).
+    // Chỗ phù hợp để gọi JS interop (DOM đã có). Ở đây chỉ log để quan sát thứ tự lifecycle.
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Logger.LogInformation("Menu: first render xong, {Count} món", _products?.Count ?? 0);
+        }
+    }
+
+    // Được ProductCard gọi qua EventCallback. Sau khi handler của EventCallback chạy xong,
+    // Blazor tự gọi StateHasChanged cho component CHA (Menu) → _message hiện ra.
+    private void HandleAddToCart(AddToCartArgs args)
+    {
+        try
+        {
+            // Ghi vào CartState (scoped) → CartState bắn OnChange → CartSummary trên top-row cập nhật số món
+            CartState.AddItem(args.Product, args.Size, args.Quantity);
+            string size = args.Product.HasSize ? $" size {args.Size}" : string.Empty;
+            _message = $"Đã thêm {args.Quantity} × {args.Product.Name}{size} vào giỏ.";
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // Domain từ chối (vd món tạm hết) → hiện thông báo thay vì làm crash circuit
+            _message = ex.Message;
+        }
+    }
+
+    // Lifecycle cuối: component bị bỏ (chuyển trang) → dọn dẹp tài nguyên
+    public void Dispose()
+    {
+        // Rời trang khi đang tải → hủy Task.Delay
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

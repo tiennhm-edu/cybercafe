@@ -1,0 +1,41 @@
+@* ==========================================================================
+   CartSummary.razor — badge giỏ hàng (Buổi 24–31 · State dùng chung + subscribe/unsubscribe).
+   Nằm trong thư mục Shared/: component dùng lại ở nhiều nơi, không có @page.
+   ========================================================================== *@
+@* Badge giỏ hàng trên thanh top-row (MainLayout).
+   Không nhận Parameter — đọc trực tiếp CartState (scoped service).
+   Lifecycle: subscribe OnChange ở OnInitialized, unsubscribe ở Dispose (tránh memory leak). *@
+@implements IDisposable
+@inject CartState CartState
+
+<a href="cart" class="btn btn-outline-primary btn-sm">
+    🛒 Giỏ hàng
+    <span class="badge bg-primary ms-1">@CartState.Cart.ItemCount</span>
+    @if (!CartState.Cart.IsEmpty)
+    {
+        <span class="ms-1">· @CartState.Cart.Total.ToString("N0") đ</span>
+    }
+</a>
+
+@code {
+    // Vì sao cần subscribe? Blazor chỉ tự render lại component khi CHÍNH nó xử lý sự kiện
+    // (click, nhập liệu...) hoặc nhận parameter mới. Nút "Thêm vào giỏ" nằm ở trang Menu,
+    // không phải ở đây → CartSummary phải "nghe" OnChange để biết mà vẽ lại.
+    protected override void OnInitialized()
+    {
+        CartState.OnChange += HandleCartChanged;
+    }
+
+    // Event có thể bắn từ component khác → dùng InvokeAsync để về đúng sync context của component này
+    // StateHasChanged(): báo Blazor "state đã đổi, render lại component này".
+    private void HandleCartChanged() => InvokeAsync(StateHasChanged);
+
+    // Vì sao phải unsubscribe? CartState sống suốt circuit (scoped), lâu hơn component.
+    // Event giữ tham chiếu tới HandleCartChanged → component đã bị bỏ vẫn không được giải phóng
+    // (memory leak) và vẫn bị gọi StateHasChanged trên component đã dispose.
+    // ⚠️ Lỗi hay gặp: có += mà quên -= ; app không lỗi ngay nên rất khó phát hiện.
+    public void Dispose()
+    {
+        CartState.OnChange -= HandleCartChanged;
+    }
+}

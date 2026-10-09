@@ -1,0 +1,135 @@
+@* ==========================================================================
+   CartPage.razor — trang Giỏ hàng /cart (Buổi 24–31 · State dùng chung, binding thủ công).
+   Vì sao file tên CartPage.razor mà không phải Cart.razor?
+   Mỗi file .razor được biên dịch thành 1 CLASS cùng tên. Cart.razor → class Cart,
+   trùng tên với class domain CyberCafe.Domain.Orders.Cart (đã @using trong _Imports)
+   → compiler không biết "Cart" là cái nào → lỗi biên dịch khó hiểu.
+   Route vẫn là /cart nhờ @page, tên file không ảnh hưởng URL.
+   ========================================================================== *@
+@page "/cart"
+@implements IDisposable
+@inject CartState CartState
+@inject DiscountService DiscountService
+
+<PageTitle>CyberCafe — Giỏ hàng</PageTitle>
+
+<h1>Giỏ hàng</h1>
+
+@if (Cart.IsEmpty)
+{
+    <div class="alert alert-light">
+        Giỏ hàng đang trống. <a href="menu">Xem thực đơn</a>
+    </div>
+}
+else
+{
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th>Món</th>
+                <th>Size</th>
+                <th class="text-end">Đơn giá</th>
+                <th style="width: 8rem">Số lượng</th>
+                <th class="text-end">Thành tiền</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @* .ToList(): duyệt trên BẢN SAO — nút ✕ xóa dòng khỏi Cart.Items trong lúc lặp vẫn an toàn.
+               @key="item": giữ đúng ô input cho đúng dòng khi có dòng bị xóa. *@
+            @foreach (OrderItem item in Cart.Items.ToList())
+            {
+                <tr @key="item">
+                    <td>@item.Product.Emoji @item.Product.Name</td>
+                    <td>@(item.Product.HasSize ? item.Size.ToString() : "—")</td>
+                    <td class="text-end">@item.UnitPrice.ToString("N0") đ</td>
+                    <td>
+                        @* value + @onchange = binding "thủ công": cần chặn số ≤ 0 trước khi gán vào domain *@
+                        @* Không dùng @bind="item.Quantity": gõ 0 sẽ gán thẳng vào setter → domain ném exception.
+                           e.Value là object (chuỗi người dùng gõ) → tự parse trong ChangeQuantity. *@
+                        <input type="number" min="0" class="form-control form-control-sm"
+                               value="@item.Quantity"
+                               @onchange="e => ChangeQuantity(item, e.Value)" />
+                    </td>
+                    <td class="text-end">@item.TotalPrice.ToString("N0") đ</td>
+                    <td>
+                        @* Lambda () => ...: cần khi phải truyền tham số (item) cho handler *@
+                        <button class="btn btn-sm btn-outline-danger" title="Xóa" @onclick="() => CartState.RemoveItem(item)">✕</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label class="form-label" for="voucher">Mã giảm giá</label>
+            <div class="input-group">
+                @* @bind="_code": two-way, cập nhật khi rời ô (onchange) — đủ dùng vì chỉ đọc khi bấm "Áp dụng" *@
+                <input id="voucher" class="form-control" placeholder="VD: GIAM20K, MEMBER10" @bind="_code" />
+                <button class="btn btn-outline-secondary" @onclick="ApplyCode">Áp dụng</button>
+            </div>
+            @if (_codeError is not null)
+            {
+                <div class="text-danger small mt-1">@_codeError</div>
+            }
+            @if (Cart.Discount is not null)
+            {
+                <div class="small mt-1">
+                    @* Display() đa hình: Voucher hiện "Mã: ...", Member hiện "Giảm ...%" *@
+                    Đang áp dụng: <strong>@Cart.Discount.Display()</strong>
+                    <button class="btn btn-link btn-sm p-0 ms-2" @onclick="CartState.ClearDiscount">Bỏ</button>
+                </div>
+            }
+        </div>
+        <div class="col-md-6">
+            <dl class="row mb-0">
+                <dt class="col-6">Tạm tính (@Cart.ItemCount món)</dt>
+                <dd class="col-6 text-end">@Cart.Subtotal.ToString("N0") đ</dd>
+                <dt class="col-6">Giảm giá</dt>
+                <dd class="col-6 text-end">-@Cart.DiscountAmount.ToString("N0") đ</dd>
+                <dt class="col-6 fs-5">Tổng cộng</dt>
+                <dd class="col-6 text-end fs-5 fw-bold">@Cart.Total.ToString("N0") đ</dd>
+            </dl>
+            <a class="btn btn-success w-100 mt-2" href="checkout">Tiến hành đặt hàng</a>
+        </div>
+    </div>
+}
+
+@code {
+    // Viết tắt cho gọn markup; mọi THAY ĐỔI vẫn đi qua CartState để bắn OnChange
+    private Cart Cart => CartState.Cart;
+    private string _code = string.Empty;
+    private string? _codeError;
+
+    // Subscribe để trang tự cập nhật khi giỏ đổi (kể cả thay đổi từ component khác) — xem CartSummary.razor
+    protected override void OnInitialized() => CartState.OnChange += HandleCartChanged;
+
+    private void HandleCartChanged() => InvokeAsync(StateHasChanged);
+
+    private void ChangeQuantity(OrderItem item, object? value)
+    {
+        // TryParse: người dùng có thể xóa trắng ô → không parse được thì bỏ qua, không crash
+        if (int.TryParse(value?.ToString(), out int quantity))
+        {
+            CartState.UpdateQuantity(item, quantity); // ≤ 0 → xóa dòng
+        }
+    }
+
+    private void ApplyCode()
+    {
+        // DiscountService trả về Discount (class cha) — trang không cần biết là Voucher hay Member
+        Discount? discount = DiscountService.FindByCode(_code);
+        if (discount is null)
+        {
+            _codeError = "Mã giảm giá không hợp lệ";
+            return;
+        }
+
+        _codeError = null;
+        CartState.ApplyDiscount(discount);
+    }
+
+    // Unsubscribe khi rời trang — thiếu dòng này là memory leak (xem giải thích ở CartSummary.razor)
+    public void Dispose() => CartState.OnChange -= HandleCartChanged;
+}

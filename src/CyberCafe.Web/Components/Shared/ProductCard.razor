@@ -1,0 +1,89 @@
+@* ==========================================================================
+   ProductCard.razor — component con tái sử dụng (Buổi 24–31 · Component, [Parameter],
+   EventCallback, data binding). Được Menu.razor dùng: <ProductCard Product="..." OnAddToCart="..." />
+   ========================================================================== *@
+@* Component tái sử dụng: hiển thị 1 món + chọn size/số lượng + nút thêm vào giỏ.
+   - [Parameter] Product: dữ liệu từ component cha (one-way: cha → con)
+   - EventCallback OnAddToCart: con báo sự kiện lên cha (con → cha)
+   - @bind: two-way binding cho size & quantity (state nội bộ của card) *@
+
+@* Giao diện dựa trên dữ liệu đa hình: Product có thể là Coffee/Tea/Cake, card không cần biết loại. *@
+<div class="card h-100 @(Product.IsAvailable ? "" : "opacity-50")">
+    <div class="card-body">
+        <div class="fs-1">@Product.Emoji</div>
+        <h5 class="card-title">@Product.Name</h5>
+        <p class="card-text small text-muted mb-2">@Product.Description</p>
+
+        @* HasSize: Drink trả true, Cake trả false → bánh không hiện ô chọn size *@
+        @if (Product.HasSize)
+        {
+            <div class="mb-2">
+                @* id="size-@Product.Id": id duy nhất cho mỗi card (nhiều card trên cùng trang) để <label for> đúng ô *@
+                <label class="form-label small mb-1" for="size-@Product.Id">Size</label>
+                @* two-way: chọn size → _size đổi → giá hiển thị đổi theo *@
+                @* @bind với enum: Blazor tự chuyển chuỗi "M" của <option> thành DrinkSize.M *@
+                <select id="size-@Product.Id" class="form-select form-select-sm" @bind="_size" disabled="@(!Product.IsAvailable)">
+                    @* Enum.GetValues<DrinkSize>(): lấy mọi giá trị S, M, L để sinh option *@
+                    @foreach (DrinkSize size in Enum.GetValues<DrinkSize>())
+                    {
+                        <option value="@size">@size (+@((Product.GetPrice(size) - Product.Price).ToString("N0")) đ)</option>
+                    }
+                </select>
+            </div>
+        }
+
+        <div class="d-flex align-items-center gap-2">
+            <label class="small" for="qty-@Product.Id">SL</label>
+            @* @bind:after="ClampQuantity": gọi ClampQuantity SAU KHI _quantity đã được gán giá trị mới
+               → kéo số về khoảng 1–20 nếu người dùng gõ 0 hoặc 99.
+               disabled="@(false)": Blazor tự BỎ thuộc tính disabled khi giá trị là false. *@
+            <input id="qty-@Product.Id" type="number" min="1" max="20" class="form-control form-control-sm" style="width: 5rem"
+                   @bind="_quantity" @bind:after="ClampQuantity" disabled="@(!Product.IsAvailable)" />
+            <span class="ms-auto fw-bold">@CurrentPrice.ToString("N0") đ</span>
+        </div>
+    </div>
+    <div class="card-footer bg-transparent">
+        @if (Product.IsAvailable)
+        {
+            @* @onclick="AddToCartAsync": truyền TÊN method (không có ngoặc). Blazor gọi khi người dùng bấm. *@
+            <button class="btn btn-primary btn-sm w-100" @onclick="AddToCartAsync">
+                Thêm vào giỏ
+            </button>
+        }
+        else
+        {
+            <span class="badge bg-secondary">Tạm hết</span>
+        }
+    </div>
+</div>
+
+@code {
+    // [Parameter]: property PUBLIC mà component cha gán qua thuộc tính thẻ (Product="product").
+    // [EditorRequired]: IDE/compiler cảnh báo nếu cha quên truyền.
+    // = default!: báo compiler "yên tâm, sẽ được cha gán" (tắt cảnh báo nullable).
+    // ⚠️ Lỗi hay gặp: tự gán lại Product trong component con → lần render sau của cha sẽ ghi đè mất.
+    //    Parameter là dữ liệu CỦA CHA; state riêng của con thì để trong field private (như _size).
+    [Parameter, EditorRequired]
+    public Product Product { get; set; } = default!;
+
+    // EventCallback<T>: "kênh" để con báo lên cha (chiều con → cha), kèm dữ liệu kiểu T.
+    // Ưu điểm so với Action: sau khi handler của cha chạy xong, Blazor tự render lại component cha.
+    [Parameter]
+    public EventCallback<AddToCartArgs> OnAddToCart { get; set; }
+
+    // State nội bộ của card: mỗi card giữ size/số lượng riêng, cha không cần biết tới khi bấm "Thêm"
+    private DrinkSize _size = DrinkSize.S;
+    private int _quantity = 1;
+
+    // one-way: giá tính lại mỗi lần render
+    private decimal CurrentPrice => Product.GetPrice(_size) * _quantity;
+
+    private void ClampQuantity() => _quantity = Math.Clamp(_quantity, 1, 20);
+
+    private async Task AddToCartAsync()
+    {
+        // Gửi dữ liệu lên cha; await để cha xử lý xong rồi mới reset số lượng
+        await OnAddToCart.InvokeAsync(new AddToCartArgs(Product, _size, _quantity));
+        _quantity = 1; // reset sau khi thêm
+    }
+}

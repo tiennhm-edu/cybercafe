@@ -1,5 +1,5 @@
 ﻿@* ==========================================================================
-   _Imports.razor — các @using dùng chung (file template, Buổi 23).
+   _Imports.razor — các @using dùng chung (file template, Buổi 23; Buổi 24–31 thêm Domain).
    Mọi file .razor trong thư mục này và thư mục con tự động "kế thừa" các
    @using bên dưới → không phải lặp lại @using ở đầu từng component.
    ⚠️ Lỗi hay gặp: tạo class/namespace mới (vd Services) mà quên thêm @using
@@ -20,3 +20,12 @@
 @using CyberCafe.Web.Components.Layout
 @using CyberCafe.Web.Models
 @using CyberCafe.Web.Services
+@* Buổi 24–31: CartState + component dùng chung trong Shared/ *@
+@using CyberCafe.Web.State
+@using CyberCafe.Web.Components.Shared
+@* Buổi 24–31: các namespace của project CyberCafe.Domain (Product, Cart, Order, Discount, Payment, Customer) *@
+@using CyberCafe.Domain.Products
+@using CyberCafe.Domain.Orders
+@using CyberCafe.Domain.Discounts
+@using CyberCafe.Domain.Payments
+@using CyberCafe.Domain.People

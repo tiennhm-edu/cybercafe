@@ -1,0 +1,97 @@
+@* ==========================================================================
+   OrderConfirmation.razor — trang xác nhận đơn /orders/{OrderId}
+   (Buổi 24–31 · Route parameter + OnParametersSet).
+   ========================================================================== *@
+@* {OrderId}: route parameter — phần URL này được gán vào property [Parameter] cùng tên bên dưới.
+   ⚠️ Lỗi hay gặp: đặt tên property khác tên trong {…} (vd Id) → giá trị không được gán. *@
+@page "/orders/{OrderId}"
+@inject OrderStore OrderStore
+
+@* Biểu thức @OrderId dùng được cả trong PageTitle *@
+<PageTitle>CyberCafe — Đơn @OrderId</PageTitle>
+
+@if (_order is null)
+{
+    <h1>Không tìm thấy đơn</h1>
+    <p>Không có đơn hàng mã <code>@OrderId</code>. Lưu ý: đơn đang lưu in-memory, khởi động lại app sẽ mất.</p>
+    <a href="menu">Về thực đơn</a>
+}
+else
+{
+    <div class="alert alert-success">
+        <h4 class="alert-heading mb-1">🎉 Đặt hàng thành công!</h4>
+        Mã đơn <strong>@_order.Id</strong> — vui lòng đọc mã này khi nhận món tại quầy.
+    </div>
+
+    <dl class="row">
+        <dt class="col-sm-3">Khách hàng</dt>
+        @* Customer.Display() là bản override: thêm "Điểm: ..." vào mô tả của Person *@
+        <dd class="col-sm-9">@_order.Customer.Display()</dd>
+        <dt class="col-sm-3">Thời gian</dt>
+        <dd class="col-sm-9">@_order.CreatedAt.ToString("HH:mm dd/MM/yyyy")</dd>
+        <dt class="col-sm-3">Trạng thái</dt>
+        <dd class="col-sm-9"><span class="badge bg-warning text-dark">@StatusText(_order.Status)</span></dd>
+        @if (_order.Note is not null)
+        {
+            <dt class="col-sm-3">Ghi chú</dt>
+            <dd class="col-sm-9">@_order.Note</dd>
+        }
+        @if (_order.Payment is not null)
+        {
+            <dt class="col-sm-3">Thanh toán</dt>
+            @* Payment.Display() đa hình: Cash/Card/Momo mỗi loại hiển thị khác nhau *@
+            <dd class="col-sm-9">@_order.Payment.Display()</dd>
+        }
+    </dl>
+
+    <table class="table">
+        <tbody>
+            @foreach (OrderItem item in _order.Items)
+            {
+                <tr>
+                    <td>@item.Product.Emoji @item.Product.Name @(item.Product.HasSize ? $"({item.Size})" : "")</td>
+                    <td class="text-end">× @item.Quantity</td>
+                    <td class="text-end">@item.TotalPrice.ToString("N0") đ</td>
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr><td colspan="2">Tạm tính</td><td class="text-end">@_order.TotalAmount.ToString("N0") đ</td></tr>
+            @if (_order.Discount is not null)
+            {
+                <tr><td colspan="2">@_order.Discount.Display()</td><td class="text-end">-@_order.DiscountAmount.ToString("N0") đ</td></tr>
+            }
+            <tr class="fw-bold"><td colspan="2">Tổng cộng</td><td class="text-end">@_order.FinalAmount.ToString("N0") đ</td></tr>
+        </tfoot>
+    </table>
+
+    <p>Điểm tích lũy hiện có: <strong>@_order.Customer.LoyaltyPoints</strong></p>
+    <a class="btn btn-primary" href="menu">Đặt thêm món</a>
+}
+
+@code {
+    // Route parameter: /orders/CC-0001 → OrderId = "CC-0001"
+    [Parameter]
+    public string OrderId { get; set; } = string.Empty;
+
+    private Order? _order;
+
+    // OnParametersSet: chạy mỗi khi parameter đổi (vd: điều hướng từ đơn này sang đơn khác)
+    // Vì sao không dùng OnInitialized? Khi chỉ đổi URL /orders/CC-0001 → /orders/CC-0002, Blazor
+    // GIỮ NGUYÊN component (cùng trang) và chỉ gán OrderId mới → OnInitialized không chạy lại,
+    // trang sẽ vẫn hiện đơn cũ. OnParametersSet chạy cả lần đầu lẫn mỗi lần parameter đổi.
+    protected override void OnParametersSet()
+    {
+        _order = OrderStore.GetById(OrderId);
+    }
+
+    // static: không dùng field nào của component. Đổi enum → chữ tiếng Việt để hiển thị.
+    private static string StatusText(OrderStatus status) => status switch
+    {
+        OrderStatus.Pending => "Chờ pha chế",
+        OrderStatus.Preparing => "Đang pha chế",
+        OrderStatus.Ready => "Sẵn sàng",
+        OrderStatus.Completed => "Hoàn tất",
+        _ => "Đã hủy"
+    };
+}

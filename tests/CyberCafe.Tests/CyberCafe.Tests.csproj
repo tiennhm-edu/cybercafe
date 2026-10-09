@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CyberCafe.Web\CyberCafe.Web.csproj" />
+    <ProjectReference Include="..\..\src\CyberCafe.Domain\CyberCafe.Domain.csproj" />
   </ItemGroup>
 
 </Project>
