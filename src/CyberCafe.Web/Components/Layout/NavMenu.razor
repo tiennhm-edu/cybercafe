@@ -1,0 +1,38 @@
+@* ==========================================================================
+   NavMenu.razor — thanh điều hướng bên trái (Buổi 23 · Routing + NavLink).
+   Mỗi mục là 1 <NavLink> trỏ tới 1 route khai báo bằng @page trong Pages/.
+   ========================================================================== *@
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">☕ CyberCafe</a>
+    </div>
+</div>
+
+@* Checkbox ẩn + CSS (:checked) = nút "hamburger" bật/tắt menu trên màn hình nhỏ, không cần JavaScript. *@
+<input type="checkbox" title="Menu điều hướng" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+        <div class="nav-item px-3">
+            @* NavLink = thẻ <a> "thông minh": tự thêm class "active" khi URL hiện tại khớp href.
+               Match="NavLinkMatch.All": chỉ active khi khớp TOÀN BỘ URL. Trang chủ (href="")
+               cần dòng này, nếu không mọi URL đều bắt đầu bằng "" → "Trang chủ" luôn sáng. *@
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Trang chủ
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            @* href không có dấu "/" đầu: tương đối với <base href="/"> trong App.razor → /menu *@
+            <NavLink class="nav-link" href="menu">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Thực đơn
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="about">
+                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Giới thiệu
+            </NavLink>
+        </div>
+    </nav>
+</div>

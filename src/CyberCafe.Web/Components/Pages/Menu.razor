@@ -1,0 +1,50 @@
+@* ==========================================================================
+   Menu.razor — trang Thực đơn (Buổi 23 · Dependency Injection + Razor lặp).
+   Minh họa: @inject lấy service từ DI, @foreach lồng nhau, biểu thức điều kiện
+   trong thuộc tính class, @if/else để hiện badge.
+   ========================================================================== *@
+@page "/menu"
+@* @inject <Kiểu> <TênBiến>: xin DI container 1 instance MenuService (đã đăng ký trong Program.cs).
+   ⚠️ Lỗi hay gặp: quên AddSingleton/AddScoped trong Program.cs → lỗi lúc chạy
+   "Cannot provide a value for property 'MenuService'... no registered service". *@
+@inject MenuService MenuService
+
+<PageTitle>CyberCafe — Thực đơn</PageTitle>
+
+<h1>Thực đơn</h1>
+
+@* @foreach lồng nhau: nhóm theo Category *@
+@foreach (string category in MenuService.GetCategories())
+{
+    <h3 class="mt-4">@category</h3>
+    @* Bootstrap grid: 1 cột trên điện thoại, 2 cột (md), 4 cột (lg) *@
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-3">
+        @foreach (MenuItem item in MenuService.GetByCategory(category))
+        {
+            <div class="col">
+                @* @( ... ): biểu thức C# phức tạp (có dấu cách, toán tử ?:) phải bọc trong ngoặc *@
+                <div class="card h-100 @(item.IsAvailable ? "" : "opacity-50")">
+                    <div class="card-body">
+                        <div class="fs-1">@item.Emoji</div>
+                        <h5 class="card-title">@item.Name</h5>
+                        <p class="card-text small text-muted">@item.Description</p>
+                        @* ToString("N0"): định dạng số có dấu phân cách nghìn, 0 chữ số thập phân *@
+                        <p class="fw-bold mb-0">@item.Price.ToString("N0") đ</p>
+                    </div>
+                    <div class="card-footer bg-transparent">
+                        @if (item.IsAvailable)
+                        {
+                            <span class="badge bg-success">Còn hàng</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Tạm hết</span>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<p class="mt-4 text-muted">Tổng cộng @MenuService.GetAll().Count món.</p>

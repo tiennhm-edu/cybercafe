@@ -1,0 +1,22 @@
+﻿@* ==========================================================================
+   _Imports.razor — các @using dùng chung (file template, Buổi 23).
+   Mọi file .razor trong thư mục này và thư mục con tự động "kế thừa" các
+   @using bên dưới → không phải lặp lại @using ở đầu từng component.
+   ⚠️ Lỗi hay gặp: tạo class/namespace mới (vd Services) mà quên thêm @using
+   ở đây → lỗi "The type or namespace name ... could not be found" trong .razor.
+   ========================================================================== *@
+@using System.Net.Http
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@* using static: cho phép viết InteractiveServer thay vì RenderMode.InteractiveServer (xem App.razor) *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.JSInterop
+@* Namespace của chính project CyberCafe.Web *@
+@using CyberCafe.Web
+@using CyberCafe.Web.Components
+@using CyberCafe.Web.Components.Layout
+@using CyberCafe.Web.Models
+@using CyberCafe.Web.Services

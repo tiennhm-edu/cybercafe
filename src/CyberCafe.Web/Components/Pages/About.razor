@@ -1,0 +1,32 @@
+@* ==========================================================================
+   About.razor — trang Giới thiệu (Buổi 23 · Razor cơ bản).
+   Minh họa: @page, <PageTitle>, @foreach trên markup và khối @code.
+   ========================================================================== *@
+@* @page "/about": khai báo route — component này là 1 TRANG, mở tại URL /about.
+   Component không có @page chỉ dùng được như thẻ con (vd <NavMenu />). *@
+@page "/about"
+
+@* PageTitle: đặt tiêu đề tab trình duyệt (được HeadOutlet trong App.razor đưa lên <head>). *@
+<PageTitle>CyberCafe — Giới thiệu</PageTitle>
+
+<h1>Giới thiệu</h1>
+
+<p>
+    CyberCafe là dự án xuyên suốt khóa .NET Full-stack.
+    Mỗi buổi học thêm một tính năng; mỗi mốc là một <code>git tag</code>.
+</p>
+
+<h4>Công nghệ</h4>
+<ul>
+    @* @foreach: vòng lặp C# sinh ra nhiều thẻ <li>. @tech in giá trị (tự động HTML-encode, chống XSS). *@
+    @foreach (string tech in _techs)
+    {
+        <li>@tech</li>
+    }
+</ul>
+
+@code {
+    // @code: khối C# của component
+    // Field private dùng được ngay trong markup phía trên. Quy ước đặt tên: _camelCase.
+    private readonly string[] _techs = ["ASP.NET Core 10", "Blazor Server (Interactive Server)", "Bootstrap 5", "xUnit"];
+}

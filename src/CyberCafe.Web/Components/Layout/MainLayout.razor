@@ -1,0 +1,33 @@
+@* ==========================================================================
+   MainLayout.razor — layout chung của mọi trang (Buổi 23 · Layout).
+   Layout là "khuôn": sidebar + thanh trên cùng giữ nguyên, chỉ phần @Body
+   thay đổi theo trang. Routes.razor chọn layout này làm DefaultLayout.
+   ========================================================================== *@
+@* @inherits LayoutComponentBase: bắt buộc với layout — cung cấp property Body. *@
+@inherits LayoutComponentBase
+
+<div class="page">
+    <div class="sidebar">
+        @* Dùng component khác như dùng thẻ HTML: tên file NavMenu.razor → thẻ <NavMenu /> *@
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4">
+            <span class="text-muted">CyberCafe — Blazor Server demo</span>
+        </div>
+
+        <article class="content px-4">
+            @* @Body: nội dung của trang hiện tại (Home, Menu, About...) được chèn vào đây *@
+            @Body
+        </article>
+    </main>
+</div>
+
+@* Thanh báo lỗi: mặc định ẩn (CSS display:none). blazor.web.js tự hiện nó khi có
+   exception chưa bắt hoặc mất kết nối không phục hồi được. *@
+<div id="blazor-error-ui" data-nosnippet>
+    Đã xảy ra lỗi không mong muốn.
+    <a href="." class="reload">Tải lại</a>
+    <span class="dismiss">🗙</span>
+</div>

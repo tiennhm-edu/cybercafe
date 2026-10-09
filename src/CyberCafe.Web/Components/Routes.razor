@@ -1,0 +1,15 @@
+﻿@* ==========================================================================
+   Routes.razor — bộ định tuyến (file template, Buổi 23 · Routing).
+   Router quét assembly tìm mọi component có directive @page "/..." và chọn
+   component khớp với URL hiện tại. Không cần đăng ký route bằng tay.
+   ========================================================================== *@
+@* AppAssembly: nơi tìm các @page. NotFoundPage: trang hiện khi URL không khớp route nào. *@
+<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+    @* Found: URL khớp → routeData chứa component cần render + route parameter (vd {OrderId}). *@
+    <Found Context="routeData">
+        @* RouteView render trang bên trong layout mặc định MainLayout (trang có thể đổi bằng @layout). *@
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        @* Sau mỗi lần chuyển trang, đặt focus vào thẻ <h1> đầu tiên (hỗ trợ trình đọc màn hình). *@
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>

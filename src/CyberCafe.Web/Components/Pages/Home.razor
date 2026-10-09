@@ -1,0 +1,27 @@
+@* ==========================================================================
+   Home.razor — trang chủ (Buổi 23 · Razor syntax).
+   Minh họa: biểu thức @..., @if/else trộn C# với HTML.
+   ========================================================================== *@
+@page "/"
+
+<PageTitle>CyberCafe — Trang chủ</PageTitle>
+
+<div class="p-4 mb-4 bg-light rounded-3">
+    <h1 class="display-6">Chào mừng đến CyberCafe ☕</h1>
+    <p class="lead">Đặt cà phê, trà và bánh online — nhận tại quầy trong 10 phút.</p>
+    <a class="btn btn-primary" href="menu">Xem thực đơn</a>
+</div>
+
+@* Razor: biểu thức C# trong HTML *@
+@* @DateTime.Now... được tính trên SERVER mỗi lần component render (Blazor Server chạy C# ở server). *@
+<p>Hôm nay là <strong>@DateTime.Now.ToString("dd/MM/yyyy")</strong>.</p>
+
+@* @if / else: chỉ render nhánh thỏa điều kiện; nhánh còn lại không có trong HTML. *@
+@if (DateTime.Now.Hour < 11)
+{
+    <div class="alert alert-success">🌅 Khung giờ sáng: giảm 10% cho cà phê!</div>
+}
+else
+{
+    <div class="alert alert-info">Mở cửa 7:00 – 22:00 mỗi ngày.</div>
+}

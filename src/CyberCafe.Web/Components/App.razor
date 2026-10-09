@@ -1,0 +1,44 @@
+﻿@* ==========================================================================
+   App.razor — "khung" HTML gốc của cả ứng dụng (file template, Buổi 23).
+   Đây là component đầu tiên được render: chứa <html>, <head>, <body>.
+   Mọi trang khác (Home, Menu...) được Router render vào bên trong <Routes />.
+
+   Khái niệm chính: RENDER MODE.
+   - @rendermode="InteractiveServer" đặt ở <Routes> và <HeadOutlet> → áp dụng
+     cho TOÀN BỘ app (global interactivity). Mỗi tab trình duyệt mở 1 kết nối
+     SignalR ("circuit") tới server; click/gõ phím được gửi lên server xử lý,
+     server tính phần HTML thay đổi rồi gửi ngược về trình duyệt.
+   - Mặc định có PRERENDER: server render HTML tĩnh 1 lần trước (để trang hiện
+     nhanh, tốt cho SEO), sau đó circuit kết nối và component được tạo LẠI ở chế
+     độ interactive → OnInitialized/OnInitializedAsync chạy 2 lần (xem Menu.razor).
+   ========================================================================== *@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    @* <base href="/">: gốc cho mọi link tương đối (href="menu" → /menu). Thiếu dòng này routing sẽ sai. *@
+    <base href="/" />
+    <ResourcePreloader />
+    @* @Assets["..."]: trả về URL tĩnh có kèm fingerprint (hash) → trình duyệt cache an toàn, đổi file là đổi URL. *@
+    <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    @* CyberCafe.Web.styles.css: file do build tự sinh, gom tất cả CSS isolation (*.razor.css). *@
+    <link rel="stylesheet" href="@Assets["CyberCafe.Web.styles.css"]" />
+    <ImportMap />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    @* HeadOutlet: chỗ để <PageTitle> của từng trang "đẩy" tiêu đề lên thẻ <head>. *@
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+
+<body>
+    @* Routes: component Router (Routes.razor). Đặt render mode ở đây = cả app chạy Interactive Server. *@
+    @* ⚠️ Lỗi hay gặp: xóa @rendermode ở đây → trang chỉ là HTML tĩnh, bấm nút @onclick không có tác dụng gì. *@
+    <Routes @rendermode="InteractiveServer" />
+    <ReconnectModal />
+    @* blazor.web.js: script phía trình duyệt mở kết nối SignalR và áp dụng các thay đổi DOM do server gửi về. *@
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+
+</html>

@@ -1,0 +1,12 @@
+@* ==========================================================================
+   NotFound.razor — trang 404 (file template, Buổi 23 · Routing).
+   Được dùng ở 2 chỗ: Routes.razor (NotFoundPage = URL không khớp @page nào khi
+   đang interactive) và Program.cs (UseStatusCodePagesWithReExecute("/not-found")
+   cho request HTTP trả về 404).
+   ========================================================================== *@
+@page "/not-found"
+@* @layout: chỉ định layout cho riêng trang này (ghi đè DefaultLayout trong Routes.razor). *@
+@layout MainLayout
+
+<h3>Không tìm thấy trang</h3>
+<p>Xin lỗi, nội dung bạn tìm không tồn tại. <a href="">Về trang chủ</a></p>

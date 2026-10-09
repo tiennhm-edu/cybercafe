@@ -1,0 +1,10 @@
+<Project>
+  <!-- Thiết lập chung cho mọi project trong solution -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Authors>TienNHM</Authors>
+    <Company>tiennhm-edu</Company>
+  </PropertyGroup>
+</Project>
