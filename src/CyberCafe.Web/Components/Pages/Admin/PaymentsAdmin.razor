@@ -17,7 +17,10 @@
 {
     <div class="alert alert-warning">
         @_error
-        <div class="small">Trang này cần chạy dưới AppHost: <code>dotnet run --project src/CyberCafe.AppHost</code>.</div>
+        <div class="small">
+            Trang này cần chạy dưới AppHost: <code>dotnet run --project src/CyberCafe.AppHost</code>.
+            Đang chạy AppHost rồi? Kiểm tra resource <code>payment</code> trên Aspire dashboard (có thể đang bị dừng).
+        </div>
     </div>
 }
 else if (_payments is null)

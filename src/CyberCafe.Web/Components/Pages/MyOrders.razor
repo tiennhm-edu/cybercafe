@@ -29,31 +29,34 @@ else if (_orders.Count == 0)
 }
 else
 {
-    <table class="table align-middle">
-        <thead>
-            <tr><th>Mã đơn</th><th>Thời gian</th><th>Món</th><th class="text-end">Tổng</th><th>Trạng thái</th><th></th></tr>
-        </thead>
-        <tbody>
-            @foreach (OrderDto order in _orders)
-            {
-                <tr @key="order.Id">
-                    @* Link sang trang xác nhận: Api vẫn kiểm tra chủ đơn lần nữa khi mở (không tin link) *@
-                    <td><a href="orders/@order.Id">@order.Code</a></td>
-                    <td>@order.CreatedAt.ToString("HH:mm dd/MM")</td>
-                    <td class="small">@string.Join(", ", order.Items.Select(i => $"{i.ProductName} × {i.Quantity}"))</td>
-                    <td class="text-end">@order.FinalAmount.ToString("N0") đ</td>
-                    <td><OrderStatusBadge Status="order.Status" /></td>
-                    <td>
-                        @* Khách chỉ hủy được khi quán CHƯA bắt đầu pha (Api kiểm tra lại luật này) *@
-                        @if (order.Status == OrderStatus.Pending)
-                        {
-                            <button class="btn btn-sm btn-outline-danger" @onclick="() => CancelAsync(order)">Hủy</button>
-                        }
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    @* table-responsive: màn hình hẹp (điện thoại) thì bảng tự cuộn ngang, không đẩy nút "Hủy" ra ngoài trang *@
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr><th>Mã đơn</th><th>Thời gian</th><th>Món</th><th class="text-end">Tổng</th><th>Trạng thái</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (OrderDto order in _orders)
+                {
+                    <tr @key="order.Id">
+                        @* Link sang trang xác nhận: Api vẫn kiểm tra chủ đơn lần nữa khi mở (không tin link) *@
+                        <td><a href="orders/@order.Id">@order.Code</a></td>
+                        <td>@order.CreatedAt.ToString("HH:mm dd/MM")</td>
+                        <td class="small">@string.Join(", ", order.Items.Select(i => $"{i.ProductName} × {i.Quantity}"))</td>
+                        <td class="text-end">@order.FinalAmount.ToString("N0") đ</td>
+                        <td><OrderStatusBadge Status="order.Status" /></td>
+                        <td>
+                            @* Khách chỉ hủy được khi quán CHƯA bắt đầu pha (Api kiểm tra lại luật này) *@
+                            @if (order.Status == OrderStatus.Pending)
+                            {
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => CancelAsync(order)">Hủy</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 }
 
 @code {

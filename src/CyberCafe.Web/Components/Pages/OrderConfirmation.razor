@@ -205,7 +205,26 @@ else
         // InvokeAsync(tên method trên hub, tham số...) — client GỌI method của server
         await _hub.InvokeAsync(OrderHubContract.WatchOrder, OrderId);
         _watchingId = OrderId;
-        await InvokeAsync(() => { _live = true; StateHasChanged(); });
+
+        // Buổi 55: tải lại đơn 1 lần SAU KHI đã vào group. Kết quả thanh toán có thể đến giữa lúc tải đơn (REST)
+        // và lúc vào group (hoặc trong lúc mất kết nối) → sự kiện SignalR đó bị lỡ, trang "Đang xử lý" mãi.
+        OrderDto? latest = null;
+        try
+        {
+            latest = await OrderApi.GetByIdAsync(OrderId);
+        }
+        catch (ApiException ex)
+        {
+            // Lỗi lần tải phụ này không quan trọng: giữ bản đã có, realtime vẫn chạy
+            Logger.LogWarning(ex, "Không tải lại được đơn {OrderId}", OrderId);
+        }
+
+        await InvokeAsync(() =>
+        {
+            _order = latest ?? _order;
+            _live = true;
+            StateHasChanged();
+        });
     }
 
     // IAsyncDisposable: HubConnection.DisposeAsync là async → component phải implement bản async.

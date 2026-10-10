@@ -58,7 +58,7 @@ dotnet run --project src/CyberCafe.AppHost
 
 | Thành phần | Địa chỉ | Ghi chú |
 |------------|---------|---------|
-| Aspire dashboard | http://localhost:15080 | Resources, Console log, **Traces** (1 lần đặt hàng = 1 trace gateway → api → RabbitMQ → payment → api), Metrics |
+| Aspire dashboard | http://localhost:15080 | Resources, Console log, **Traces** (1 lần đặt hàng = 1 trace web → gateway → api → RabbitMQ → payment → api; lọc Resource = `payment`), Metrics |
 | Web (Blazor Server) | http://localhost:5170 | Chỉ gọi **gateway** (`ApiBaseUrl=http://gateway/`, `HubBaseUrl`) |
 | Gateway (YARP) | http://localhost:5190 | `/api/*`, `/hubs/*` → api · `/payments/*` → payment (chỉ Admin, JWT kiểm ở gateway) |
 | Api — Order service | http://localhost:5180 | Như b53 + outbox; `Payments__Flow=Messaging` (thanh toán qua Payment service) |

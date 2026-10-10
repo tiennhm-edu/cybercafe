@@ -250,6 +250,7 @@
     private async Task DeleteAsync(ProductDto product)
     {
         _confirmDeleteId = null;
+        _message = null; // xóa thông báo cũ — nếu không, lỗi 409 hiện CÙNG LÚC với "Đã xóa ..." của lần trước
         try
         {
             await MenuApi.DeleteAsync(product.Id);
